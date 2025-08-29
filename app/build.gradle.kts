@@ -21,6 +21,8 @@ repositories {
 dependencies {
     // Use JUnit Jupiter for testing.
     testImplementation("org.junit.jupiter:junit-jupiter:5.9.1")
+    testImplementation("org.junit.platform:junit-platform-suite:1.9.1")
+    testImplementation("org.openjfx:javafx-swing:24.0.2")
 
     // This dependency is used by the application.
     implementation("com.google.guava:guava:31.1-jre")
@@ -31,12 +33,38 @@ javafx {
     modules = listOf("javafx.controls", "javafx.fxml")
 }
 
+tasks.withType<JavaExec> {
+    jvmArgs = listOf(
+        "--add-modules", "javafx.controls,javafx.fxml",
+        "--add-opens", "javafx.graphics/javafx.scene=ALL-UNNAMED"
+    )
+}
+
 application {
     // Define the main class for the application.
-    mainClass.set("theknife.App")
+    mainClass.set("dev.theknife.app.App")
 }
 
 tasks.named<Test>("test") {
     // Use JUnit Platform for unit tests.
     useJUnitPlatform()
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs("src/main/java")  // Ensures that Gradle looks here for main classes
+        }
+        resources {
+            srcDirs("src/main/resources")  // Ensures that resources are included from here
+        }
+    }
+    test {
+        java {
+            srcDirs("src/test/java")  // Ensures that Gradle looks here for test classes
+        }
+        resources {
+            srcDirs("src/test/resources")  // Ensures that test resources are included
+        }
+    }
 }
