@@ -52,13 +52,17 @@ jobs:
       - name: Ensure gradlew is executable
         run: chmod +x gradlew
 
-      - name: Setup Gradle with caching
+      - name: Setup Gradle (no cache issues)
         uses: gradle/gradle-build-action@v2
         with:
           gradle-version: wrapper
+          cache-disabled: true  # disable until cache service is stable
 
       - name: Build JAR
         run: ./gradlew shadowJar --parallel --max-workers=2
+
+      - name: List build output
+        run: ls -R build/libs || true
 
       - name: Upload runnable JAR
         uses: actions/upload-artifact@v4
