@@ -59,13 +59,13 @@ jobs:
           cache-disabled: true  # disable until cache service is stable
 
       - name: Build JAR
-        run: ./gradlew shadowJar --parallel --max-workers=2
+        run: ./gradlew jar --parallel --max-workers=2
 
       - name: List build output
-        run: ls -R build/libs || true
+        run: ls -la app/build/libs/ || true
 
       - name: Upload runnable JAR
         uses: actions/upload-artifact@v4
         with:
-          name: theknife-app
-          path: build/libs/theknife-app.jar
+          name: TheKnife-app
+          path: app/build/libs/TheKnife.jar
