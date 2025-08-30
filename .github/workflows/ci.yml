@@ -36,7 +36,7 @@ jobs:
           name: test-results
           path: app/build/reports/tests/
 
-  build-fat-jar:
+  build-jar:
     needs: test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
@@ -57,11 +57,11 @@ jobs:
         with:
           gradle-version: wrapper
 
-      - name: Build fat JAR
+      - name: Build JAR
         run: ./gradlew shadowJar --parallel --max-workers=2
 
       - name: Upload runnable JAR
         uses: actions/upload-artifact@v4
         with:
           name: theknife-app
-          path: build/libs/*-all.jar
+          path: build/libs/theknife-app.jar
