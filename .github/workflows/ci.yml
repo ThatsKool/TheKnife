@@ -1,9 +1,9 @@
-name: The Knife continuous integration workflow.
+name: The Knife continuous integration workflow
 
 on:
-  push:                # Run on any push, including main
+  push:
     branches: [ '**' ]
-  pull_request:         # Run on any PR into main
+  pull_request:
     branches: [ main ]
 
 jobs:
@@ -18,22 +18,14 @@ jobs:
         with:
           java-version: '24'
           distribution: 'temurin'
-          cache: gradle
+
+      - name: Ensure gradlew is executable
+        run: chmod +x gradlew
 
       - name: Setup Gradle
         uses: gradle/gradle-build-action@v2
         with:
           gradle-version: wrapper
-
-      - name: Cache Gradle packages
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
 
       - name: Build and test
         run: ./gradlew build
@@ -48,7 +40,7 @@ jobs:
   build:
     needs: test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'   # Only build JAR on main
+    if: github.ref == 'refs/heads/main'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -58,7 +50,9 @@ jobs:
         with:
           java-version: '24'
           distribution: 'temurin'
-          cache: gradle
+
+      - name: Ensure gradlew is executable
+        run: chmod +x gradlew
 
       - name: Setup Gradle
         uses: gradle/gradle-build-action@v2
