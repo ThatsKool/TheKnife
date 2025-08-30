@@ -1,4 +1,4 @@
-name: The Knife continuous integration workflow
+name: The Knife continuous integration workflow.
 
 on:
   push:                # Run on any push, including main
