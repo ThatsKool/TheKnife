@@ -26,8 +26,9 @@ import java.util.Map;
  * È possibile sovrascrivere con la proprietà di sistema {@code theknife.data.dir}.
  * </p>
  * <p>
- * Al primo avvio, se la directory locale è vuota, i dati iniziali vengono copiati dalla
- * cartella {@code data} del progetto (in sviluppo) o dalla cartella {@code data} accanto al JAR.
+ * Al primo avvio, se la directory locale non contiene ancora i CSV, vengono copiati solo i file
+ * CSV dalla cartella {@code data} del progetto (in sviluppo) o da quella accanto al JAR.
+ * Le immagini restano nella cartella {@code data} del progetto/JAR e non vengono copiate.
  * </p>
  *
  * @author Federico Barbotti, Oittijo Ahemmed Sarkar, Bennajim Alì
@@ -102,27 +103,6 @@ public final class ResourceFileHelper {
     }
 
     /**
-     * Copia ricorsivamente il contenuto di {@code source} in {@code target}.
-     */
-    private static void copyDirectoryRecursively(Path source, Path target) throws IOException {
-        if (!Files.isDirectory(source)) {
-            return;
-        }
-        try (var stream = Files.list(source)) {
-            for (Path entry : stream.toList()) {
-                Path dest = target.resolve(entry.getFileName());
-                if (Files.isDirectory(entry)) {
-                    Files.createDirectories(dest);
-                    copyDirectoryRecursively(entry, dest);
-                } else {
-                    Files.createDirectories(dest.getParent());
-                    Files.copy(entry, dest, StandardCopyOption.REPLACE_EXISTING);
-                }
-            }
-        }
-    }
-
-    /**
      * Verifica se la directory utente ha già i CSV (dati già inizializzati).
      */
     private static boolean hasRequiredData(Path dir) {
@@ -153,8 +133,14 @@ public final class ResourceFileHelper {
 
         Path seedDir = resolveSeedBaseDir().resolve("data");
         if (Files.isDirectory(seedDir) && !hasRequiredData(TARGET_DIR)) {
-            logger.info("Primo avvio: copia dati di seed da " + seedDir + " a " + TARGET_DIR);
-            copyDirectoryRecursively(seedDir, TARGET_DIR);
+            logger.info("Primo avvio: copia solo i CSV di seed da " + seedDir + " a " + TARGET_DIR);
+            for (String fileName : CSV_FILE_NAMES) {
+                Path src = seedDir.resolve(fileName);
+                Path dest = TARGET_DIR.resolve(fileName);
+                if (Files.isRegularFile(src) && Files.notExists(dest)) {
+                    Files.copy(src, dest);
+                }
+            }
         }
 
         Map<String, Path> csvPaths = new HashMap<>();
@@ -178,11 +164,13 @@ public final class ResourceFileHelper {
     }
 
     /**
-     * Restituisce la directory delle immagini nella cartella dati utente ({@code <user_data>/images}).
+     * Restituisce la directory delle immagini (solo lettura).
+     * Le immagini restano nella cartella {@code data/images} del progetto o accanto al JAR,
+     * non vengono copiate nella directory utente.
      *
-     * @return Il percorso della directory immagini.
+     * @return Il percorso della directory immagini (data/images).
      */
     public static Path getImagesDirectory() {
-        return TARGET_DIR.resolve("images");
+        return resolveSeedBaseDir().resolve("data").resolve("images");
     }
 }

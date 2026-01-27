@@ -58,13 +58,13 @@ L'applicazione è stata sviluppata per windows ma contiene tutte le librerie nec
 
 # 📁 SALVATAGGIO DATI
 
-I dati dell'applicazione (utenti, ristoranti, recensioni, preferiti e immagini) vengono **salvati nella directory locale dell'utente**, non nel progetto:
+I dati dell'applicazione (utenti, ristoranti, recensioni, preferiti) vengono **salvati nella directory locale dell'utente**, non nel progetto:
 
 - **Windows:** `C:\Users\<tuouser>\.theknife\data`
 - **macOS:** `~/Library/Application Support/TheKnife/data`
 - **Linux:** `~/.local/share/theknife/data`
 
-Al primo avvio, i dati iniziali vengono copiati dalla cartella `data` del progetto (o da quella accanto al JAR) nella directory utente. Da quel momento tutte le letture e le scritture usano solo la directory locale.
+Al primo avvio, solo i file CSV vengono copiati dalla cartella `data` del progetto (o da quella accanto al JAR) nella directory utente. Le immagini restano nella cartella `data` del progetto/JAR e non vengono copiate.
 
 ---
 
