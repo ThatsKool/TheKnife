@@ -1,0 +1,82 @@
+name: The Knife CI
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: write   # REQUIRED for creating releases
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Ensure gradlew is executable
+        run: chmod +x gradlew
+
+      - name: Setup Gradle with caching
+        uses: gradle/gradle-build-action@v2
+        with:
+          gradle-version: wrapper
+          cache-disabled: false
+          gradle-home-cache-cleanup: true
+
+      - name: Run tests
+        run: ./gradlew test --parallel --max-workers=2
+
+  build-and-release:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Ensure gradlew is executable
+        run: chmod +x gradlew
+
+      - name: Setup Gradle with caching
+        uses: gradle/gradle-build-action@v2
+        with:
+          gradle-version: wrapper
+          cache-disabled: false
+          gradle-home-cache-cleanup: true
+
+      - name: Build ALL platform JARs
+        run: ./gradlew buildAllJars --parallel --max-workers=2
+
+      - name: Package JARs into a single folder
+        run: |
+          mkdir release
+          cp bin/windows/TheKnife.jar release/TheKnife-windows.jar
+          cp bin/linux/TheKnife.jar release/TheKnife-linux.jar
+          cp bin/mac/TheKnife.jar release/TheKnife-mac.jar
+
+      - name: Create dynamic tag
+        id: tag
+        run: |
+          TAG="build-$(date +'%Y%m%d-%H%M%S')"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          git tag $TAG
+          git push origin $TAG
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: "Automated build ${{ steps.tag.outputs.tag }}"
+          files: release/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

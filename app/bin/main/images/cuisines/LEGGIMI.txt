@@ -1,0 +1,50 @@
+ISTRUZIONI PER LE IMMAGINI DELLE CUCINE
+=======================================
+
+Il sistema collegherà automaticamente le cucine specifiche (es. "Tuscan", "Roman") alle immagini dei macrogruppi qui sotto.
+
+Nomi dei file:
+
+EUROPA
+------
+- italian.jpg           (Per cucina italiana, toscana, romana, ecc.)
+- pizza.jpg             (Per pizzerie)
+- french.jpg            (Per cucina francese, provenzale, ecc.)
+- spanish.jpg           (Per spagnola, portoghese, tapas)
+- greek.jpg             (Per greca e mediterranea)
+- british.jpg           (Per inglese, irlandese, fish & chips)
+- german.jpg            (Per tedesca, austriaca, svizzera)
+- scandinavian.jpg      (Per nordica, danese, svedese)
+- eastern_european.jpg  (Per russa, polacca, ungherese)
+- european.jpg          (Generico europeo)
+
+ASIA
+----
+- japanese.jpg          (Per sushi, ramen, giapponese)
+- chinese.jpg           (Per cinese, cantonese, dim sum)
+- korean.jpg            (Per coreana, bbq coreano)
+- thai.jpg              (Per thailandese)
+- vietnamese.jpg        (Per vietnamita)
+- indian.jpg            (Per indiana, curry, nepalese)
+- asian.jpg             (Generico asiatico, malese, indonesiano)
+
+AMERICHE
+--------
+- american.jpg          (Per burger, bbq, americana)
+- mexican.jpg           (Per messicana, tex-mex)
+- latin_american.jpg    (Per argentina, brasiliana, peruviana)
+
+ALTRO
+-----
+- middle_eastern.jpg    (Per libanese, turca, persiana)
+- african.jpg           (Per marocchina, etiope, africana)
+- steakhouse.jpg        (Per carne, griglia, steakhouse)
+- seafood.jpg           (Per pesce, frutti di mare)
+- vegetarian.jpg        (Per vegetariana, vegana)
+- street_food.jpg       (Per street food, noodles, bakery)
+- fusion.jpg            (Per fusion, creativa, moderna)
+- traditional.jpg       (Per cucina tradizionale, casalinga)
+
+DEFAULT
+-------
+- default.jpg           (Usata se non viene trovata nessun'altra corrispondenza)
