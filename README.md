@@ -1,8 +1,8 @@
-<img src="image/13016_uni-insubria-wcj.png"  align="center">
+<img src="data/image/13016_uni-insubria-wcj.png"  align="center">
 
 
 <p align="center">
-  <img src="image/logo.png" width="390" height="595">
+  <img src="data/image/logo.png" width="390" height="595">
 </p>
 
 --- 
@@ -56,14 +56,26 @@ L'applicazione è stata sviluppata per windows ma contiene tutte le librerie nec
 
 ---
 
+# 📁 SALVATAGGIO DATI
+
+I dati dell'applicazione (utenti, ristoranti, recensioni, preferiti e immagini) vengono **salvati nella directory locale dell'utente**, non nel progetto:
+
+- **Windows:** `C:\Users\<tuouser>\.theknife\data`
+- **macOS:** `~/Library/Application Support/TheKnife/data`
+- **Linux:** `~/.local/share/theknife/data`
+
+Al primo avvio, i dati iniziali vengono copiati dalla cartella `data` del progetto (o da quella accanto al JAR) nella directory utente. Da quel momento tutte le letture e le scritture usano solo la directory locale.
+
+---
+
 # 📹 BREVE VIDEO DELL'INTERFACCIA GRAFICA
 
 <p align="center">
-  <img src="image\video.gif" alt="GIF GUI">
+  <img src="data/image/video.gif" alt="GIF GUI">
 </p>
 
 <p align="center">
-  <video src="./image/video_gui.mp4" controls>
+  <video src="data/image/video_gui.mp4" controls>
     Il tuo browser non supporta il tag video.
   </video>
 </p>

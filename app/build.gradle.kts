@@ -82,6 +82,8 @@ application {
 
 tasks.named<JavaExec>("run") {
     jvmArgs = listOf("-Xmx4g")
+    // Working dir = root del progetto così la directory "data" è trovata come root/data
+    workingDir = project.rootProject.projectDir
 }
 
 // This is the fat JAR task — merges all runtime deps into one jar
@@ -127,7 +129,7 @@ tasks.register<JavaExec>("migrateMainCSV") {
     description = "Add progressive IDs and update header in main CSV"
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("dev.theknife.app.tools.TestCSVIdAdder")
-    args(project.file("src/main/resources/data/michelin_my_maps.csv").absolutePath, "sequential")
+    args(project.rootProject.file("data/michelin_my_maps.csv").absolutePath, "sequential")
 }
 
 tasks.javadoc {
@@ -225,6 +227,14 @@ tasks.register("buildJarWindows") {
                 from(sourceJar)
                 into(file("${project.rootDir}/bin/windows"))
             }
+            val dataDir = project.rootProject.file("data")
+            if (dataDir.exists()) {
+                copy {
+                    from(dataDir)
+                    into(file("${project.rootDir}/bin/windows/data"))
+                }
+                logger.lifecycle("  Cartella data copiata in bin/windows/data")
+            }
             logger.lifecycle("✓ JAR Windows creato: ${targetJar.absolutePath}")
             logger.lifecycle("  Dimensione: ${targetJar.length() / 1024 / 1024} MB")
         } else {
@@ -268,6 +278,14 @@ tasks.register("buildJarLinux") {
                 from(sourceJar)
                 into(file("${project.rootDir}/bin/linux"))
             }
+            val dataDir = project.rootProject.file("data")
+            if (dataDir.exists()) {
+                copy {
+                    from(dataDir)
+                    into(file("${project.rootDir}/bin/linux/data"))
+                }
+                logger.lifecycle("  Cartella data copiata in bin/linux/data")
+            }
             logger.lifecycle("✓ JAR Linux creato: ${targetJar.absolutePath}")
             logger.lifecycle("  Dimensione: ${targetJar.length() / 1024 / 1024} MB")
         } else {
@@ -310,6 +328,14 @@ tasks.register("buildJarMac") {
             copy {
                 from(sourceJar)
                 into(file("${project.rootDir}/bin/mac"))
+            }
+            val dataDir = project.rootProject.file("data")
+            if (dataDir.exists()) {
+                copy {
+                    from(dataDir)
+                    into(file("${project.rootDir}/bin/mac/data"))
+                }
+                logger.lifecycle("  Cartella data copiata in bin/mac/data")
             }
             logger.lifecycle("✓ JAR Mac creato: ${targetJar.absolutePath}")
             logger.lifecycle("  Dimensione: ${targetJar.length() / 1024 / 1024} MB")

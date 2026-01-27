@@ -6,8 +6,11 @@
  */
 package dev.theknife.app.util;
 
+import dev.theknife.app.config.ResourceFileHelper;
 import javafx.scene.image.Image;
-import java.io.InputStream;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Logger;
@@ -40,12 +43,6 @@ public class CuisineImageManager {
     
     /** Cache delle immagini caricate per evitare riletture dal disco/classpath. */
     private final Map<String, Image> imageCache;
-    
-    /** Immagine di fallback se nessuna corrispondenza viene trovata. */
-    private static final String DEFAULT_IMAGE_PATH = "/images/cuisines/default.jpg";
-    
-    /** Percorso base delle risorse immagini. */
-    private static final String IMAGE_BASE_PATH = "/images/cuisines/";
     
     // COSTRUTTORI
     /**
@@ -107,17 +104,17 @@ public class CuisineImageManager {
     }
 
     /**
-     * Carica un'immagine dal classpath dato il nome del file.
-     * 
+     * Carica un'immagine dalla directory {@code data/images/cuisines/} dato il nome del file.
+     *
      * @param filename Il nome del file immagine (es. "italian.jpg").
      * @return L'oggetto {@link Image} caricato o {@code null} se il caricamento fallisce.
      */
     private Image loadImage(String filename) {
-        String path = IMAGE_BASE_PATH + filename;
+        Path base = ResourceFileHelper.getImagesDirectory().resolve("cuisines");
+        Path path = base.resolve(filename);
         try {
-            InputStream is = getClass().getResourceAsStream(path);
-            if (is != null) {
-                return new Image(is);
+            if (Files.isRegularFile(path)) {
+                return new Image(path.toUri().toString());
             }
         } catch (Exception e) {
             logger.warning("Failed to load image: " + path + " - " + e.getMessage());

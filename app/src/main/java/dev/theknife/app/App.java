@@ -27,8 +27,12 @@ import javafx.scene.effect.DropShadow;
 import javafx.animation.PauseTransition;
 import javafx.util.Duration;
 
+import dev.theknife.app.config.ResourceFileHelper;
 import dev.theknife.app.service.IRestaurantService;
 import dev.theknife.app.session.SessionContext;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
 import dev.theknife.app.view.RestaurantListView;
 import dev.theknife.app.viewmodel.RestaurantListViewModel;
 import dev.theknife.app.view.FavoriteRestaurantsView;
@@ -119,11 +123,11 @@ public class App extends Application {
         this.primaryStage = primaryStage;
         primaryStage.setTitle("The Knife - Restaurant Management System");
         
-        // Imposta l'icona dell'applicazione
+        // Imposta l'icona dell'applicazione da data/images/logo.png
         try {
-            java.net.URL iconUrl = getClass().getResource("/images/logo.png");
-            if (iconUrl != null) {
-                primaryStage.getIcons().add(new javafx.scene.image.Image(iconUrl.toExternalForm()));
+            Path iconPath = ResourceFileHelper.getImagesDirectory().resolve("logo.png");
+            if (Files.isRegularFile(iconPath)) {
+                primaryStage.getIcons().add(new javafx.scene.image.Image(iconPath.toUri().toString()));
             }
         } catch (Exception e) {
             System.err.println("Impossibile caricare l'icona dell'applicazione: " + e.getMessage());
@@ -199,11 +203,11 @@ public class App extends Application {
         StackPane logoContainer = new StackPane();
         logoContainer.setPrefSize(300, 300); // Increased to 300 (balanced)
         
-        // 1. Prova a caricare il logo fornito dall'utente da /images/logo.png
+        // 1. Prova a caricare il logo da data/images/logo.png
         try {
-            java.net.URL logoUrl = getClass().getResource("/images/logo.png");
-            if (logoUrl != null) {
-                javafx.scene.image.ImageView logoImage = new javafx.scene.image.ImageView(new javafx.scene.image.Image(logoUrl.toExternalForm()));
+            Path logoPath = ResourceFileHelper.getImagesDirectory().resolve("logo.png");
+            if (Files.isRegularFile(logoPath)) {
+                javafx.scene.image.ImageView logoImage = new javafx.scene.image.ImageView(new javafx.scene.image.Image(logoPath.toUri().toString()));
                 logoImage.setFitWidth(300); // Aumentata a 300
                 logoImage.setFitHeight(300);
                 logoImage.setPreserveRatio(true);
