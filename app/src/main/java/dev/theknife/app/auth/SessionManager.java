@@ -1,5 +1,5 @@
 /*
- * Autori:
+ * Autori :
  * - Federico Barbotti, 752545, Varese
  * - Oittijo Ahemmed Sarkar, 759646, Varese
  * - Bennajim Alì, 760125, Varese
