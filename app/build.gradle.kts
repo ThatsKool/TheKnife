@@ -33,6 +33,10 @@ sourceSets {
         java {
             srcDirs("src/main/java")
         }
+        resources {
+            // Risorse principali dell'applicazione
+            srcDirs("src/main/resources", "../data")
+        }
     }
     test {
         java {
@@ -127,7 +131,7 @@ tasks.register<JavaExec>("migrateMainCSV") {
     description = "Add progressive IDs and update header in main CSV"
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("dev.theknife.app.tools.TestCSVIdAdder")
-    args(project.file("src/main/resources/data/michelin_my_maps.csv").absolutePath, "sequential")
+    args(project.file("../data/data/michelin_my_maps.csv").absolutePath, "sequential")
 }
 
 tasks.javadoc {

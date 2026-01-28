@@ -1,8 +1,8 @@
-<img src="image/13016_uni-insubria-wcj.png"  align="center">
+<img src="data/foto/13016_uni-insubria-wcj.png"  align="center">
 
 
 <p align="center">
-  <img src="image/logo.png" width="390" height="595">
+  <img src="data/foto/logo.png" width="390" height="595">
 </p>
 
 --- 
@@ -56,14 +56,41 @@ L'applicazione è stata sviluppata per windows ma contiene tutte le librerie nec
 
 ---
 
+## 📂 DOVE VENGONO SALVATI I DATI IN LOCALE
+
+L'applicazione copia i file CSV dalle risorse interne in una cartella dati scrivibile dall'utente.  
+I dati (utenti, ristoranti, recensioni, preferiti) vengono salvati nelle seguenti posizioni:
+
+- **Windows**
+  - Cartella base dati: `%USERPROFILE%\.theknife\data`
+
+- **macOS**
+  - Cartella base dati: `~/Library/Application Support/TheKnife/data`
+  - Esempio: `/Users/<nome_utente>/Library/Application Support/TheKnife/data`
+
+- **Linux / altri sistemi Unix-like**
+  - Cartella base dati: `~/.local/share/theknife/data`
+  - Esempio: `/home/<nome_utente>/.local/share/theknife/data`
+
+All'interno di queste cartelle troverai i file:
+
+- `users.csv`
+- `michelin_my_maps.csv`
+- `reviews.csv`
+- `favorites.csv`
+
+Se elimini questi file o l'intera cartella dati, al prossimo avvio l'app li ricreerà.
+
+---
+
 # 📹 BREVE VIDEO DELL'INTERFACCIA GRAFICA
 
 <p align="center">
-  <img src="image\video.gif" alt="GIF GUI">
+  <img src="data/foto/video.gif" alt="GIF GUI">
 </p>
-
+ 
 <p align="center">
-  <video src="./image/video_gui.mp4" controls>
+  <video src="./data/foto/video_gui.mp4" controls>
     Il tuo browser non supporta il tag video.
   </video>
 </p>
