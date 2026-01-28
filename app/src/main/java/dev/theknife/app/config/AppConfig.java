@@ -51,7 +51,7 @@ public final class AppConfig {
     // COSTRUTTORI
     static {
         // Hardcoded configuration for simplicity and team sharing
-        DEBUG = true;
+        DEBUG = false;
         TEST_CLIENT_EMAIL = "client@example.com";
         TEST_CLIENT_PASSWORD = "client123";
         TEST_RESTAURATEUR_EMAIL = "resto@example.com";
