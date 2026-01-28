@@ -197,6 +197,7 @@ public class CSVManager<T> {
                 for (T item : cache) {
                     writer.println(serializer.apply(item));
                 }
+                writer.flush();
                 dirty = false;
                 logger.debug("Successfully wrote " + cache.size() + " items to " + file.getName());
             } catch (IOException e) {

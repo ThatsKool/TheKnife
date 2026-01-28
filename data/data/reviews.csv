@@ -1,1 +1,1 @@
-Id,RestaurantName,UserName,Rating,Comment,ReviewDate,IsVerified,RestaurateurResponse,ClientResponse
+Id,RestaurantId,UserEmail,Rating,Comment,ReviewDate,IsVerified,RestaurateurResponse,ClientResponse

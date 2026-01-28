@@ -102,14 +102,16 @@ public class ReviewViewModel {
      * @param review La recensione da modificare.
      */
     public void initializeForEdit(Review review) {
-        if (!sessionContext.isLoggedIn() || sessionContext.getCurrentUserName() == null) {
+        if (!sessionContext.isLoggedIn() || sessionContext.getCurrentUser() == null) {
             errorMessage.set("Devi essere loggato per modificare una recensione. Effettua il login.");
             isValid.set(false);
             return;
         }
         
-        String currentName = sessionContext.getCurrentUserName();
-        if (review.getUserName() != null && !review.getUserName().equals(currentName)) {
+        var currentUser = sessionContext.getCurrentUser();
+        boolean isOwner = currentUser.getEmail() != null && review.getUserEmail() != null
+                && review.getUserEmail().equalsIgnoreCase(currentUser.getEmail());
+        if (!isOwner) {
             errorMessage.set("Puoi modificare solo le tue recensioni.");
             isValid.set(false);
             return;
@@ -117,7 +119,7 @@ public class ReviewViewModel {
         
         this.existingReview = review;
         this.restaurantName = review.getRestaurantName();
-        this.userName = review.getUserName();
+        this.userName = review.getUserName() != null ? review.getUserName() : currentUser.getName();
         
         // Carica i dati della recensione esistente
         rating.set(review.getRating());
@@ -152,8 +154,9 @@ public class ReviewViewModel {
         successMessage.set("");
         isSubmitting.set(false);
         
-        // Verifica se l'utente ha già recensito questo ristorante
-        if (reviewService.hasUserReviewedRestaurant(userName, restaurantName)) {
+        // Verifica se l'utente ha già recensito questo ristorante (solo email)
+        String userEmail = sessionContext.getCurrentUser() != null ? sessionContext.getCurrentUser().getEmail() : null;
+        if (reviewService.hasUserReviewedRestaurant(userEmail, restaurantName)) {
             errorMessage.set("Hai già recensito questo ristorante.");
             isValid.set(false);
         } else {

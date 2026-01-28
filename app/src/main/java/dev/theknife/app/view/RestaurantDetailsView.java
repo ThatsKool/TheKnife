@@ -10,6 +10,7 @@ import dev.theknife.app.container.DependencyContainer;
 import dev.theknife.app.model.Review;
 import dev.theknife.app.service.IRestaurantService;
 import dev.theknife.app.service.IReviewService;
+import dev.theknife.app.service.IUserService;
 import dev.theknife.app.service.IFavoriteService;
 import dev.theknife.app.session.SessionContext;
 import dev.theknife.app.viewmodel.RestaurantDetailsViewModel;
@@ -90,8 +91,9 @@ public class RestaurantDetailsView extends VBox {
         this.sessionContext = sessionContext;
         IRestaurantService restaurantService = container.get(IRestaurantService.class);
         IReviewService reviewService = container.get(IReviewService.class);
+        IUserService userService = container.get(IUserService.class);
         this.favoriteService = container.get(IFavoriteService.class);
-        this.viewModel = new RestaurantDetailsViewModel(restaurantService, reviewService, sessionContext);
+        this.viewModel = new RestaurantDetailsViewModel(restaurantService, reviewService, userService, sessionContext);
         this.restaurantNameLabel = new Label();
         this.addressLabel = new Label();
         this.locationLabel = new Label();
@@ -471,13 +473,13 @@ public class RestaurantDetailsView extends VBox {
                                 sessionContext.getCurrentUser() != null && 
                                 ("Restaurateur".equals(sessionContext.getCurrentUser().getRole()) || "Ristoratore".equals(sessionContext.getCurrentUser().getRole()));
         
-        // Restaurateurs cannot add favorites
         favoriteButton.setVisible(isLoggedIn && !isRestaurateur);
-        favoriteButton.setDisable(!isLoggedIn || isRestaurateur || currentRestaurantName == null);
+        dev.theknife.app.model.Restaurant current = viewModel.getCurrentRestaurant();
+        favoriteButton.setDisable(!isLoggedIn || isRestaurateur || current == null || current.getId() == null);
         
-        if (isLoggedIn && !isRestaurateur && currentRestaurantName != null) {
-            String userName = sessionContext.getCurrentUserName();
-            boolean isFavorite = favoriteService.isFavorite(userName, currentRestaurantName);
+        if (isLoggedIn && !isRestaurateur && current != null && current.getId() != null) {
+            String userEmail = sessionContext.getCurrentUser() != null ? sessionContext.getCurrentUser().getEmail() : null;
+            boolean isFavorite = userEmail != null && favoriteService.isFavorite(userEmail, current.getId());
             
             if (isFavorite) {
                 favoriteButton.setText("★ Rimuovi dai Preferiti");
@@ -489,15 +491,11 @@ public class RestaurantDetailsView extends VBox {
         }
     }
     
-    /**
-     * Handle favorite button click
-     */
     private void onToggleFavorite() {
-        if (!sessionContext.isLoggedIn() || currentRestaurantName == null) {
-            return;
-        }
+        if (!sessionContext.isLoggedIn()) return;
+        dev.theknife.app.model.Restaurant current = viewModel.getCurrentRestaurant();
+        if (current == null || current.getId() == null) return;
         
-        // Restaurateurs cannot add favorites
         boolean isRestaurateur = sessionContext.getCurrentUser() != null && 
                                 ("Restaurateur".equals(sessionContext.getCurrentUser().getRole()) || "Ristoratore".equals(sessionContext.getCurrentUser().getRole()));
         if (isRestaurateur) {
@@ -508,14 +506,15 @@ public class RestaurantDetailsView extends VBox {
             return;
         }
         
-        String userName = sessionContext.getCurrentUserName();
-        boolean isFavorite = favoriteService.isFavorite(userName, currentRestaurantName);
+        String userEmail = sessionContext.getCurrentUser() != null ? sessionContext.getCurrentUser().getEmail() : null;
+        if (userEmail == null) return;
+        boolean isFavorite = favoriteService.isFavorite(userEmail, current.getId());
         
         boolean success;
         if (isFavorite) {
-            success = favoriteService.removeFavorite(userName, currentRestaurantName);
+            success = favoriteService.removeFavorite(userEmail, current.getId());
         } else {
-            success = favoriteService.addFavorite(userName, currentRestaurantName);
+            success = favoriteService.addFavorite(userEmail, current.getId());
         }
         
         if (success) {
@@ -715,7 +714,8 @@ public class RestaurantDetailsView extends VBox {
                 header.setSpacing(10);
                 header.setAlignment(Pos.CENTER_LEFT);
                 
-                Label userLabel = new Label(review.getUserName());
+                String authorDisplay = viewModel.getReviewAuthorDisplayName(review);
+                Label userLabel = new Label(authorDisplay);
                 userLabel.setFont(Font.font("Arial", FontWeight.BOLD, 12));
                 userLabel.setStyle("-fx-text-fill: #2c3e50;");
                 
@@ -741,10 +741,10 @@ public class RestaurantDetailsView extends VBox {
                 boolean isLoggedIn = sessionContext.isLoggedIn();
                 String currentUserEmail = sessionContext.getCurrentUser() != null ? sessionContext.getCurrentUser().getEmail() : null;
                 
-                // Use email for ownership check (more secure/unique than name)
-                boolean isReviewOwner = isLoggedIn && currentUserEmail != null && 
-                                      review.getUserEmail() != null && 
-                                      currentUserEmail.equalsIgnoreCase(review.getUserEmail());
+                // Proprietario: solo email (univoco e persistente)
+                boolean isReviewOwner = isLoggedIn && currentUserEmail != null
+                        && review.getUserEmail() != null
+                        && currentUserEmail.equalsIgnoreCase(review.getUserEmail());
                 
                 // Check if current user is the restaurateur owner
                 dev.theknife.app.model.Restaurant restaurant = viewModel.getCurrentRestaurant();
@@ -778,7 +778,8 @@ public class RestaurantDetailsView extends VBox {
                         clientResponseBox.setPadding(new Insets(8));
                         clientResponseBox.setStyle("-fx-background-color: #fff3cd; -fx-border-color: #ffc107; -fx-border-radius: 5; -fx-background-radius: 5;");
                         
-                        Label clientResponseHeader = new Label("Risposta da " + review.getUserName() + ":");
+                        String clientName = viewModel.getReviewAuthorDisplayName(review);
+                        Label clientResponseHeader = new Label("Risposta da " + clientName + ":");
                         clientResponseHeader.setFont(Font.font("Arial", FontWeight.BOLD, 11));
                         clientResponseHeader.setStyle("-fx-text-fill: #856404;");
                         
@@ -863,7 +864,7 @@ public class RestaurantDetailsView extends VBox {
     private void onRestaurateurRespond(Review review) {
         ModalManager.getInstance().showTextAreaDialog(
             "Rispondi alla Recensione",
-            "Rispondi alla recensione di " + review.getUserName(),
+            "Rispondi alla recensione di " + viewModel.getReviewAuthorDisplayName(review),
             "La tua risposta...",
             response -> {
                 // Validation: Length and Format

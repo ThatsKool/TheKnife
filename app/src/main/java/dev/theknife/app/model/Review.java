@@ -321,22 +321,17 @@ public final class Review {
     }
     
     /**
-     * Restituisce una rappresentazione stringa della recensione in formato CSV.
-     * <p>
-     * Ordine allineato all'header reviews.csv: Id, RestaurantName, UserName, Rating, Comment, ReviewDate, IsVerified, RestaurateurResponse, ClientResponse.
-     * </p>
-     *
-     * @return Stringa rappresentativa della recensione in formato CSV (9 colonne).
+     * Serializzazione CSV: Id, RestaurantId, UserEmail, Rating, Comment, ReviewDate, IsVerified, RestaurateurResponse, ClientResponse.
      */
     @Override
     public String toString() {
-        String commentSafe = comment != null ? comment.replace(",", ";") : "";
-        String restResp = restaurateurResponse != null ? restaurateurResponse.replace(",", ";") : "";
-        String clientResp = clientResponse != null ? clientResponse.replace(",", ";") : "";
+        String commentSafe = sanitizeForCsv(comment);
+        String restResp = sanitizeForCsv(restaurateurResponse);
+        String clientResp = sanitizeForCsv(clientResponse);
         return String.format("%s,%s,%s,%d,%s,%s,%s,%s,%s",
             id != null ? id : "",
-            restaurantName != null ? restaurantName : "",
-            userName != null ? userName : "",
+            restaurantId != null ? restaurantId : "",
+            userEmail != null ? userEmail : "",
             rating,
             commentSafe,
             reviewDate != null ? reviewDate.format(DATE_FORMATTER) : "",
@@ -344,6 +339,11 @@ public final class Review {
             restResp,
             clientResp
         );
+    }
+
+    private static String sanitizeForCsv(String value) {
+        if (value == null) return "";
+        return value.replace(",", ";").replace("\r", " ").replace("\n", " ").trim();
     }
     
     /**

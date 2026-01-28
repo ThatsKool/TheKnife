@@ -8,9 +8,13 @@ package dev.theknife.app.viewmodel;
 
 import dev.theknife.app.model.Restaurant;
 import dev.theknife.app.model.Review;
+import dev.theknife.app.model.User;
 import dev.theknife.app.service.IRestaurantService;
 import dev.theknife.app.service.IReviewService;
+import dev.theknife.app.service.IUserService;
 import dev.theknife.app.session.SessionContext;
+
+import java.io.IOException;
 import dev.theknife.app.util.Logger;
 import javafx.beans.property.*;
 import javafx.collections.FXCollections;
@@ -43,6 +47,7 @@ public class RestaurantDetailsViewModel {
     // CAMPI
     private final IRestaurantService restaurantService;
     private final IReviewService reviewService;
+    private final IUserService userService;
     private final SessionContext sessionContext;
     private final Logger logger;
     
@@ -73,11 +78,13 @@ public class RestaurantDetailsViewModel {
      *
      * @param restaurantService Servizio per il recupero dei dati del ristorante.
      * @param reviewService Servizio per la gestione delle recensioni.
+     * @param userService Servizio per risolvere email → nome (autore recensioni).
      * @param sessionContext Contesto di sessione (nessun getInstance).
      */
-    public RestaurantDetailsViewModel(IRestaurantService restaurantService, IReviewService reviewService, SessionContext sessionContext) {
+    public RestaurantDetailsViewModel(IRestaurantService restaurantService, IReviewService reviewService, IUserService userService, SessionContext sessionContext) {
         this.restaurantService = restaurantService;
         this.reviewService = reviewService;
+        this.userService = userService;
         this.sessionContext = sessionContext;
         this.logger = Logger.getLogger(RestaurantDetailsViewModel.class);
         
@@ -198,12 +205,16 @@ public class RestaurantDetailsViewModel {
      * </p>
      */
     private void updateCanAddReview() {
-        if (currentRestaurant == null || currentUserName == null) {
+        if (currentRestaurant == null) {
             canAddReview.set(false);
             return;
         }
-        
-        boolean hasReviewed = reviewService.hasUserReviewedRestaurant(currentUserName, currentRestaurant.getName());
+        String userEmail = sessionContext.getCurrentUser() != null ? sessionContext.getCurrentUser().getEmail() : null;
+        if (userEmail == null) {
+            canAddReview.set(false);
+            return;
+        }
+        boolean hasReviewed = reviewService.hasUserReviewedRestaurant(userEmail, currentRestaurant.getName());
         canAddReview.set(!hasReviewed);
     }
     
@@ -255,6 +266,32 @@ public class RestaurantDetailsViewModel {
      */
     public String getCurrentUserName() {
         return currentUserName;
+    }
+
+    /**
+     * Restituisce il nome da mostrare per l'autore di una recensione.
+     * Usa userName se presente, altrimenti risolve l'email tramite UserService (recensioni da CSV).
+     *
+     * @param review La recensione.
+     * @return Nome da visualizzare (nome utente, email o "Utente").
+     */
+    public String getReviewAuthorDisplayName(Review review) {
+        if (review == null) return "Utente";
+        if (review.getUserName() != null && !review.getUserName().isBlank()) {
+            return review.getUserName();
+        }
+        if (review.getUserEmail() != null && !review.getUserEmail().isBlank()) {
+            try {
+                User user = userService.findUserByEmail(review.getUserEmail().trim());
+                if (user != null && user.getName() != null && !user.getName().isBlank()) {
+                    return user.getName();
+                }
+            } catch (IOException e) {
+                logger.error("Error resolving author name for " + review.getUserEmail() + ": " + e.getMessage());
+            }
+            return review.getUserEmail();
+        }
+        return "Utente";
     }
 
     /**
