@@ -52,10 +52,11 @@ public final class ResourceFileHelper {
     private static final Map<String, String> CSV_FILES = new HashMap<>();
     
     static {
-        CSV_FILES.put("data/users.csv", "users.csv");
-        CSV_FILES.put("data/michelin_my_maps.csv", "michelin_my_maps.csv");
-        CSV_FILES.put("data/reviews.csv", "reviews.csv");
-        CSV_FILES.put("data/favorites.csv", "favorites.csv");
+        // Percorso nel classpath: data/data/ (cartella data in root progetto)
+        CSV_FILES.put("data/data/users.csv", "users.csv");
+        CSV_FILES.put("data/data/michelin_my_maps.csv", "michelin_my_maps.csv");
+        CSV_FILES.put("data/data/reviews.csv", "reviews.csv");
+        CSV_FILES.put("data/data/favorites.csv", "favorites.csv");
     }
     
     /**
@@ -102,11 +103,17 @@ public final class ResourceFileHelper {
     public static Path prepareWritableFile(String resourcePath, String targetFileName) throws IOException {
         Path targetPath = TARGET_DIR.resolve(targetFileName);
         if (Files.notExists(targetPath)) {
-            try (InputStream in = ResourceFileHelper.class.getClassLoader().getResourceAsStream(resourcePath)) {
-                if (in == null) {
-                    throw new FileNotFoundException("Resource not found in classpath: " + resourcePath);
-                }
-                Files.copy(in, targetPath);
+            ClassLoader cl = ResourceFileHelper.class.getClassLoader();
+            InputStream in = cl.getResourceAsStream(resourcePath);
+            if (in == null) {
+                String fallback = resourcePath.replace("data/data/", "data/");
+                in = cl.getResourceAsStream(fallback);
+            }
+            if (in == null) {
+                throw new FileNotFoundException("Resource not found in classpath: " + resourcePath + " (nor " + resourcePath.replace("data/data/", "data/") + ")");
+            }
+            try (InputStream stream = in) {
+                Files.copy(stream, targetPath);
                 logger.info("Copied resource '" + resourcePath + "' to: " + targetPath);
             }
         } else {

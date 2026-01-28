@@ -37,8 +37,8 @@ import java.util.stream.Collectors;
 public class ReviewService implements IReviewService {
     
     // CAMPI
-    /** Header del file CSV. */
-    private static final String HEADER = "Id,RestaurantName,UserName,Rating,Comment,ReviewDate,IsVerified,RestaurateurResponse,ClientResponse";
+    /** Header del file CSV (persistenza: id ristorante e email utente). */
+    private static final String HEADER = "Id,RestaurantId,UserEmail,Rating,Comment,ReviewDate,IsVerified,RestaurateurResponse,ClientResponse";
 
     /** Gestore persistenza CSV. */
     private final CSVManager<Review> reviewManager;
@@ -55,11 +55,17 @@ public class ReviewService implements IReviewService {
     /** Indice per lookup O(1) tramite ID recensione. */
     private final Map<String, Review> byId = new HashMap<>();
     
-    /** Indice per lookup rapidi per ristorante. */
+    /** Indice per lookup per ristorante (nome, per legacy). */
     private final Map<String, List<Review>> byRestaurantName = new HashMap<>();
     
-    /** Indice per lookup rapidi per utente. */
+    /** Indice per lookup per ristorante (ID). */
+    private final Map<Long, List<Review>> byRestaurantId = new HashMap<>();
+    
+    /** Indice per lookup per utente (nome o email). */
     private final Map<String, List<Review>> byUserName = new HashMap<>();
+    
+    /** Indice per lookup per utente (email). */
+    private final Map<String, List<Review>> byUserEmail = new HashMap<>();
     
     /** Contatore per generazione ID (basato su timestamp). */
     private long idCounter = System.currentTimeMillis();
@@ -134,12 +140,23 @@ public class ReviewService implements IReviewService {
 
         try {
             String newId = generateId();
-            Review toStore = review.withId(newId);
+            Long restaurantId = review.getRestaurantId();
+            if (restaurantId == null && review.getRestaurantName() != null) {
+                dev.theknife.app.model.Restaurant r = restaurantService.findRestaurantByName(review.getRestaurantName());
+                if (r != null) restaurantId = r.getId();
+            }
+            String userEmail = review.getUserEmail();
+            if (userEmail == null && review.getUserName() != null && review.getUserName().contains("@")) {
+                userEmail = review.getUserName();
+            }
+            Review toStore = new Review(newId, restaurantId, review.getRestaurantName(), userEmail, review.getUserName(),
+                review.getRating(), review.getComment(), review.getReviewDate(), review.isVerified(),
+                review.getRestaurateurResponse(), review.getClientResponse());
             allReviews.add(toStore);
             indexReview(toStore);
             reviewManager.save(toStore);
             reviewManager.saveToDisk();
-            logger.info("Added review for restaurant: " + toStore.getRestaurantName());
+            logger.info("Added review for restaurant: " + (review.getRestaurantName() != null ? review.getRestaurantName() : restaurantId));
             return true;
         } catch (IOException e) {
             logger.error("Error saving review: " + e.getMessage(), e);
@@ -210,7 +227,8 @@ public class ReviewService implements IReviewService {
     @Override
     public boolean hasUserReviewedRestaurant(String userName, String restaurantName) {
         return getReviewsForRestaurant(restaurantName).stream()
-                .anyMatch(review -> review.getUserName().equals(userName));
+                .anyMatch(review -> (review.getUserName() != null && review.getUserName().equals(userName))
+                    || (review.getUserEmail() != null && review.getUserEmail().equals(userName)));
     }
 
     /**
@@ -263,7 +281,9 @@ public class ReviewService implements IReviewService {
         allReviews.clear();
         byId.clear();
         byRestaurantName.clear();
+        byRestaurantId.clear();
         byUserName.clear();
+        byUserEmail.clear();
         allReviews.addAll(loadAndIndex());
     }
 
@@ -475,68 +495,56 @@ public class ReviewService implements IReviewService {
      * @param csvLine La riga grezza letta dal file CSV.
      * @return L'oggetto {@link Review} ricostruito, oppure {@code null} se la riga è malformata.
      */
+    private static String safeField(String[] fields, int i) {
+        return (fields != null && i < fields.length && fields[i] != null) ? fields[i].trim() : "";
+    }
+
     private Review parseReviewFromCSV(String csvLine) {
+        if (csvLine == null || csvLine.trim().isEmpty()) {
+            return null;
+        }
         try {
             String[] fields = CSVManager.parseCSVLine(csvLine);
-            if (fields.length < 7) {
+            if (fields == null || fields.length < 7) {
                 return null;
             }
+            // Nuovo formato: Id, RestaurantId, UserEmail, Rating, Comment, ReviewDate, IsVerified, RestaurateurResponse, ClientResponse (9 campi)
+            String f1 = safeField(fields, 1);
+            String f2 = safeField(fields, 2);
+            boolean newFormat = fields.length >= 9
+                    && !f1.isEmpty() && f1.matches("\\d+")
+                    && f2.contains("@");
 
-            boolean looksLikeNewFormat = fields.length >= 9
-                    && fields[1] != null
-                    && fields[1].trim().matches("\\d+")
-                    && fields[2] != null
-                    && fields[2].contains("@");
-
-            if (looksLikeNewFormat) {
-                String id = fields[0];
-                Long restaurantId = Long.parseLong(fields[1].trim());
-                String userEmail = fields[2].trim();
-                String restaurantName = fields[3];
-                String userName = fields[4];
-                int rating = Integer.parseInt(fields[5]);
-                String comment = fields[6].replace(";", ",");
-                LocalDate reviewDate = LocalDate.parse(fields[7], DateTimeFormatter.ISO_LOCAL_DATE);
-                boolean isVerified = Boolean.parseBoolean(fields[8]);
-
-                String restaurateurResponse = null;
-                String clientResponse = null;
-
-                if (fields.length >= 10 && !fields[9].trim().isEmpty()) {
-                    restaurateurResponse = fields[9].replace(";", ",");
-                }
-
-                if (fields.length >= 11 && !fields[10].trim().isEmpty()) {
-                    clientResponse = fields[10].replace(";", ",");
-                }
-
-                return new Review(id, restaurantId, restaurantName, userEmail, userName, rating, comment, reviewDate, isVerified, restaurateurResponse, clientResponse);
-            } else {
-                // Legacy format - convert to new format with null IDs
-                String id = fields[0];
-                String restaurantName = fields[1];
-                String userName = fields[2];
-                int rating = Integer.parseInt(fields[3]);
-                String comment = fields[4].replace(";", ",");
-                LocalDate reviewDate = LocalDate.parse(fields[5], DateTimeFormatter.ISO_LOCAL_DATE);
-                boolean isVerified = Boolean.parseBoolean(fields[6]);
-
-                String restaurateurResponse = null;
-                String clientResponse = null;
-
-                if (fields.length >= 8 && !fields[7].trim().isEmpty()) {
-                    restaurateurResponse = fields[7].replace(";", ",");
-                }
-
-                if (fields.length >= 9 && !fields[8].trim().isEmpty()) {
-                    clientResponse = fields[8].replace(";", ",");
-                }
-
-                // Extract email from userName if it contains @, otherwise null
-                String userEmail = (userName != null && userName.contains("@")) ? userName : null;
-                
-                return new Review(id, null, restaurantName, userEmail, userName, rating, comment, reviewDate, isVerified, restaurateurResponse, clientResponse);
+            if (newFormat) {
+                String id = safeField(fields, 0);
+                if (id.isEmpty()) return null;
+                Long restaurantId = Long.parseLong(f1);
+                String userEmail = f2;
+                String r3 = safeField(fields, 3);
+                int rating = Integer.parseInt(r3.isEmpty() ? "0" : r3);
+                if (rating < 1 || rating > 5) return null;
+                String comment = safeField(fields, 4).replace(";", ",");
+                LocalDate reviewDate = LocalDate.parse(safeField(fields, 5), DateTimeFormatter.ISO_LOCAL_DATE);
+                boolean isVerified = Boolean.parseBoolean(safeField(fields, 6));
+                String restaurateurResponse = (fields.length >= 8 && !safeField(fields, 7).isEmpty()) ? safeField(fields, 7).replace(";", ",") : null;
+                String clientResponse = (fields.length >= 9 && !safeField(fields, 8).isEmpty()) ? safeField(fields, 8).replace(";", ",") : null;
+                return new Review(id, restaurantId, null, userEmail, null, rating, comment, reviewDate, isVerified, restaurateurResponse, clientResponse);
             }
+            // Legacy: Id, RestaurantName, UserName, Rating, Comment, ReviewDate, IsVerified, RestaurateurResponse, ClientResponse
+            String id = safeField(fields, 0);
+            if (id.isEmpty()) return null;
+            String restaurantName = safeField(fields, 1);
+            String userName = safeField(fields, 2);
+            String r3Legacy = safeField(fields, 3);
+            int ratingLegacy = Integer.parseInt(r3Legacy.isEmpty() ? "0" : r3Legacy);
+            if (ratingLegacy < 1 || ratingLegacy > 5) return null;
+            String commentLegacy = safeField(fields, 4).replace(";", ",");
+            LocalDate reviewDateLegacy = LocalDate.parse(safeField(fields, 5), DateTimeFormatter.ISO_LOCAL_DATE);
+            boolean isVerifiedLegacy = Boolean.parseBoolean(safeField(fields, 6));
+            String restaurateurResponseLegacy = (fields.length >= 8 && !safeField(fields, 7).isEmpty()) ? safeField(fields, 7).replace(";", ",") : null;
+            String clientResponseLegacy = (fields.length >= 9 && !safeField(fields, 8).isEmpty()) ? safeField(fields, 8).replace(";", ",") : null;
+            String userEmailLegacy = (userName != null && userName.contains("@")) ? userName : null;
+            return new Review(id, null, restaurantName, userEmailLegacy, userName, ratingLegacy, commentLegacy, reviewDateLegacy, isVerifiedLegacy, restaurateurResponseLegacy, clientResponseLegacy);
         } catch (Exception e) {
             logger.error("Error parsing review CSV line: " + csvLine, e);
             return null;
@@ -590,7 +598,9 @@ public class ReviewService implements IReviewService {
         }
         byId.clear();
         byRestaurantName.clear();
+        byRestaurantId.clear();
         byUserName.clear();
+        byUserEmail.clear();
         for (Review review : reviews) {
             if (review == null) continue;
             indexReview(review);
@@ -619,25 +629,34 @@ public class ReviewService implements IReviewService {
         if (review.getRestaurantName() != null) {
             byRestaurantName.computeIfAbsent(review.getRestaurantName(), k -> new ArrayList<>()).add(review);
         }
+        if (review.getRestaurantId() != null) {
+            byRestaurantId.computeIfAbsent(review.getRestaurantId(), k -> new ArrayList<>()).add(review);
+        }
         if (review.getUserName() != null) {
             byUserName.computeIfAbsent(review.getUserName(), k -> new ArrayList<>()).add(review);
         }
+        if (review.getUserEmail() != null) {
+            byUserEmail.computeIfAbsent(review.getUserEmail(), k -> new ArrayList<>()).add(review);
+        }
     }
 
-    /**
-     * Rimuove una recensione dagli indici in memoria.
-     *
-     * @param review La recensione da rimuovere dagli indici.
-     */
     private void removeFromIndexes(Review review) {
         byId.remove(review.getId());
-        List<Review> restList = byRestaurantName.get(review.getRestaurantName());
-        if (restList != null) {
-            restList.remove(review);
+        if (review.getRestaurantName() != null) {
+            List<Review> restList = byRestaurantName.get(review.getRestaurantName());
+            if (restList != null) restList.remove(review);
         }
-        List<Review> userList = byUserName.get(review.getUserName());
-        if (userList != null) {
-            userList.remove(review);
+        if (review.getRestaurantId() != null) {
+            List<Review> byIdList = byRestaurantId.get(review.getRestaurantId());
+            if (byIdList != null) byIdList.remove(review);
+        }
+        if (review.getUserName() != null) {
+            List<Review> userList = byUserName.get(review.getUserName());
+            if (userList != null) userList.remove(review);
+        }
+        if (review.getUserEmail() != null) {
+            List<Review> emailList = byUserEmail.get(review.getUserEmail());
+            if (emailList != null) emailList.remove(review);
         }
         allReviews.remove(review);
     }

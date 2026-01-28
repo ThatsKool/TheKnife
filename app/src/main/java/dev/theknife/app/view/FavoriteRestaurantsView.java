@@ -261,30 +261,25 @@ public class FavoriteRestaurantsView extends VBox {
         favoritesListView.setVisible(false);
         emptyLabel.setVisible(false);
         
-        String userName = sessionContext.getCurrentUserName();
+        String userEmail = sessionContext.getCurrentUser() != null ? sessionContext.getCurrentUser().getEmail() : null;
+        if (userEmail == null) {
+            if (loadingBox != null) loadingBox.setVisible(false);
+            emptyLabel.setText("Effettua l'accesso per vedere i tuoi preferiti.");
+            emptyLabel.setVisible(true);
+            favoritesListView.setVisible(false);
+            return;
+        }
         
         Task<javafx.collections.ObservableList<Restaurant>> task = new Task<>() {
-            /**
-             * Esegue il caricamento asincrono dei ristoranti preferiti dell'utente corrente.
-             * <p>
-             * Recupera i nomi dei ristoranti preferiti e li converte in oggetti Restaurant
-             * completi tramite il servizio ristoranti.
-             * </p>
-             *
-             * @return Una lista osservabile contenente i ristoranti preferiti.
-             * @throws Exception Se si verifica un errore durante il caricamento.
-             */
             @Override
             protected javafx.collections.ObservableList<Restaurant> call() throws Exception {
-                // Lavoro in background
-                List<String> favoriteNames = favoriteService.getUserFavorites(userName);
+                List<dev.theknife.app.model.FavoriteRestaurant> favorites = favoriteService.getUserFavoriteRestaurants(userEmail);
                 javafx.collections.ObservableList<Restaurant> restaurants = javafx.collections.FXCollections.observableArrayList();
-                
-                if (favoriteNames != null) {
-                    for (String restaurantName : favoriteNames) {
-                        Restaurant restaurant = restaurantService.findRestaurantByName(restaurantName);
-                        if (restaurant != null) {
-                            restaurants.add(restaurant);
+                if (favorites != null) {
+                    for (dev.theknife.app.model.FavoriteRestaurant fav : favorites) {
+                        if (fav.getRestaurantId() != null) {
+                            Restaurant r = restaurantService.findRestaurantById(fav.getRestaurantId());
+                            if (r != null) restaurants.add(r);
                         }
                     }
                 }
@@ -538,9 +533,9 @@ public class FavoriteRestaurantsView extends VBox {
                 ));
                 AnimationUtils.applyButtonHoverAnimation(removeButton);
                 removeButton.setOnAction(e -> {
-                    String userName = sessionContext != null ? sessionContext.getCurrentUserName() : null;
-                    if (userName != null && favoriteService.removeFavorite(userName, restaurant.getName())) {
-                        loadFavorites(); 
+                    String userEmail = sessionContext != null && sessionContext.getCurrentUser() != null ? sessionContext.getCurrentUser().getEmail() : null;
+                    if (userEmail != null && restaurant.getId() != null && favoriteService.removeFavorite(userEmail, restaurant.getId())) {
+                        loadFavorites();
                     }
                 });
                 

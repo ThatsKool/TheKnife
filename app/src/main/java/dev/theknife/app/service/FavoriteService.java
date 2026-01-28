@@ -38,8 +38,8 @@ import java.util.stream.Collectors;
 public class FavoriteService implements IFavoriteService {
     
     // CAMPI
-    /** Header del file CSV per la validazione. */
-    private static final String HEADER = "UserName,RestaurantName";
+    /** Header del file CSV (persistenza: email utente, ID ristorante). */
+    private static final String HEADER = "UserEmail,RestaurantId";
     
     /** Gestore della persistenza CSV. */
     private final CSVManager<FavoriteRestaurant> favoriteManager;
@@ -50,11 +50,11 @@ public class FavoriteService implements IFavoriteService {
     /** Lista completa dei preferiti (Master copy in memoria). */
     private final List<FavoriteRestaurant> allFavorites;
     
-    /** Indice ottimizzato per lookup rapidi per utente. Key: UserName. */
+    /** Indice per lookup per utente. Key: userEmail. */
     private final Map<String, List<FavoriteRestaurant>> favoritesByUser = new HashMap<>();
     
-    /** Indice ottimizzato per lookup rapidi per ristorante. Key: RestaurantName. */
-    private final Map<String, List<FavoriteRestaurant>> favoritesByRestaurant = new HashMap<>();
+    /** Indice per lookup per ristorante. Key: restaurantId. */
+    private final Map<Long, List<FavoriteRestaurant>> favoritesByRestaurant = new HashMap<>();
     
     // COSTRUTTORI
     /**
@@ -83,26 +83,25 @@ public class FavoriteService implements IFavoriteService {
      * </p>
      */
     @Override
-    public boolean addFavorite(String userName, String restaurantName) {
-        if (userName == null || restaurantName == null || userName.trim().isEmpty() || restaurantName.trim().isEmpty()) {
-            logger.warn("Attempted to add favorite with null or empty values");
+    public boolean addFavorite(String userEmail, Long restaurantId) {
+        if (userEmail == null || userEmail.trim().isEmpty() || restaurantId == null) {
+            logger.warn("Attempted to add favorite with null or empty userEmail or null restaurantId");
             return false;
         }
         
         try {
-            // controlla se è gia nei preferiti
-            if (isFavorite(userName, restaurantName)) {
-                logger.info("Restaurant already in favorites: " + restaurantName);
-                return true; // Giò nei preferiti, considerato successo
+            if (isFavorite(userEmail.trim(), restaurantId)) {
+                logger.info("Restaurant already in favorites: " + restaurantId);
+                return true;
             }
             
-            FavoriteRestaurant favorite = new FavoriteRestaurant(userName.trim(), restaurantName.trim());
+            FavoriteRestaurant favorite = new FavoriteRestaurant(userEmail.trim(), restaurantId);
             allFavorites.add(favorite);
             indexFavorite(favorite);
             favoriteManager.save(favorite);
             favoriteManager.saveToDisk();
             
-            logger.info("Added favorite: " + restaurantName + " for user: " + userName);
+            logger.info("Added favorite restaurantId " + restaurantId + " for user: " + userEmail);
             return true;
         } catch (IOException e) {
             logger.error("Error adding favorite: " + e.getMessage(), e);
@@ -110,33 +109,30 @@ public class FavoriteService implements IFavoriteService {
         }
     }
     
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public boolean removeFavorite(String userName, String restaurantName) {
-        if (userName == null || restaurantName == null) {
+    public boolean removeFavorite(String userEmail, Long restaurantId) {
+        if (userEmail == null || restaurantId == null) {
             return false;
         }
         
         try {
-            // cerca il preferito da rimuovere
             FavoriteRestaurant favoriteToRemove = allFavorites.stream()
-                    .filter(fav -> fav.getUserName().equals(userName.trim()) && 
-                                 fav.getRestaurantName().equals(restaurantName.trim()))
+                    .filter(fav -> fav.getUserEmail() != null && fav.getRestaurantId() != null
+                            && fav.getUserEmail().equals(userEmail.trim()) && fav.getRestaurantId().equals(restaurantId))
                     .findFirst()
                     .orElse(null);
             
             if (favoriteToRemove == null) {
-                logger.warn("Favorite not found for removal: " + restaurantName + " for user: " + userName);
+                logger.warn("Favorite not found for removal: restaurantId " + restaurantId + " for user: " + userEmail);
                 return false;
             }
-            boolean removed = favoriteManager.removeIf(fav -> 
-                userName.trim().equals(fav.getUserName()) && restaurantName.trim().equals(fav.getRestaurantName()));
+            boolean removed = favoriteManager.removeIf(fav ->
+                fav.getUserEmail() != null && fav.getRestaurantId() != null
+                && userEmail.trim().equals(fav.getUserEmail()) && restaurantId.equals(fav.getRestaurantId()));
             if (removed) {
                 removeFromIndexes(favoriteToRemove);
                 favoriteManager.saveToDisk();
-                logger.info("Removed favorite: " + restaurantName + " for user: " + userName);
+                logger.info("Removed favorite restaurantId " + restaurantId + " for user: " + userEmail);
                 return true;
             }
             return false;
@@ -146,39 +142,26 @@ public class FavoriteService implements IFavoriteService {
         }
     }
     
-    /**
-     * {@inheritDoc}
-     * <p>
-     * Utilizza l'indice {@code favoritesByUser} per una verifica rapida O(N_user_favorites)
-     * invece di scansionare tutti i preferiti.
-     * </p>
-     */
     @Override
-    public boolean isFavorite(String userName, String restaurantName) {
-        return favoritesByUser.getOrDefault(userName, List.of()).stream()
-                .anyMatch(fav -> fav.getRestaurantName().equals(restaurantName));
+    public boolean isFavorite(String userEmail, Long restaurantId) {
+        if (userEmail == null || restaurantId == null) return false;
+        return favoritesByUser.getOrDefault(userEmail.trim(), List.of()).stream()
+                .anyMatch(fav -> fav.getRestaurantId() != null && fav.getRestaurantId().equals(restaurantId));
     }
     
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public List<String> getUserFavorites(String userName) {
-        return favoritesByUser.getOrDefault(userName, List.of())
-                .stream()
-                .map(FavoriteRestaurant::getRestaurantName)
+    public List<Long> getUserFavoriteIds(String userEmail) {
+        if (userEmail == null) return List.of();
+        return favoritesByUser.getOrDefault(userEmail.trim(), List.of()).stream()
+                .map(FavoriteRestaurant::getRestaurantId)
+                .filter(id -> id != null)
                 .collect(Collectors.toList());
     }
     
-    /**
-     * {@inheritDoc}
-     * <p>
-     * Restituisce una copia della lista per preservare l'incapsulamento degli indici interni.
-     * </p>
-     */
     @Override
-    public List<FavoriteRestaurant> getUserFavoriteRestaurants(String userName) {
-        return new ArrayList<>(favoritesByUser.getOrDefault(userName, List.of()));
+    public List<FavoriteRestaurant> getUserFavoriteRestaurants(String userEmail) {
+        if (userEmail == null) return List.of();
+        return new ArrayList<>(favoritesByUser.getOrDefault(userEmail.trim(), List.of()));
     }
     
     /**
@@ -216,39 +199,37 @@ public class FavoriteService implements IFavoriteService {
                 logger.warn("Invalid CSV line (expected 2 fields, got " + parts.length + "): " + csvLine);
                 return null;
             }
-            
-            String userName = parts[0].trim();
-            String restaurantName = parts[1].trim();
-            
-            return new FavoriteRestaurant(userName, restaurantName);
+            String userEmail = parts[0].trim();
+            String second = parts[1].trim();
+            if (userEmail.isEmpty()) return null;
+            if (!second.matches("\\d+")) {
+                logger.warn("Skipping legacy favorites line (expected RestaurantId numeric): " + csvLine);
+                return null;
+            }
+            Long restaurantId = Long.parseLong(second);
+            return new FavoriteRestaurant(userEmail, restaurantId);
         } catch (Exception e) {
             logger.error("Error parsing favorite CSV line: " + csvLine, e);
             return null;
         }
     }
     
-    /**
-     * Aggiorna gli indici in memoria aggiungendo un nuovo preferito.
-     *
-     * @param favorite Il preferito da indicizzare.
-     */
     private void indexFavorite(FavoriteRestaurant favorite) {
-        if (favorite.getUserName() != null) {
-            favoritesByUser.computeIfAbsent(favorite.getUserName(), k -> new ArrayList<>()).add(favorite);
+        if (favorite.getUserEmail() != null) {
+            favoritesByUser.computeIfAbsent(favorite.getUserEmail(), k -> new ArrayList<>()).add(favorite);
         }
-        if (favorite.getRestaurantName() != null) {
-            favoritesByRestaurant.computeIfAbsent(favorite.getRestaurantName(), k -> new ArrayList<>()).add(favorite);
+        if (favorite.getRestaurantId() != null) {
+            favoritesByRestaurant.computeIfAbsent(favorite.getRestaurantId(), k -> new ArrayList<>()).add(favorite);
         }
     }
 
-    /**
-     * Rimuove un preferito dagli indici in memoria.
-     *
-     * @param favorite Il preferito da rimuovere.
-     */
     private void removeFromIndexes(FavoriteRestaurant favorite) {
-        favoritesByUser.getOrDefault(favorite.getUserName(), new ArrayList<>()).remove(favorite);
-        favoritesByRestaurant.getOrDefault(favorite.getRestaurantName(), new ArrayList<>()).remove(favorite);
+        if (favorite.getUserEmail() != null) {
+            favoritesByUser.getOrDefault(favorite.getUserEmail(), new ArrayList<>()).remove(favorite);
+        }
+        if (favorite.getRestaurantId() != null) {
+            favoritesByRestaurant.getOrDefault(favorite.getRestaurantId(), new ArrayList<>()).remove(favorite);
+        }
         allFavorites.remove(favorite);
     }
 

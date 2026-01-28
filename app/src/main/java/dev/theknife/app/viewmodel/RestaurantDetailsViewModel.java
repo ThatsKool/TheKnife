@@ -198,12 +198,16 @@ public class RestaurantDetailsViewModel {
      * </p>
      */
     private void updateCanAddReview() {
-        if (currentRestaurant == null || currentUserName == null) {
+        if (currentRestaurant == null) {
             canAddReview.set(false);
             return;
         }
-        
-        boolean hasReviewed = reviewService.hasUserReviewedRestaurant(currentUserName, currentRestaurant.getName());
+        String userEmail = sessionContext.getCurrentUser() != null ? sessionContext.getCurrentUser().getEmail() : null;
+        if (userEmail == null) {
+            canAddReview.set(false);
+            return;
+        }
+        boolean hasReviewed = reviewService.hasUserReviewedRestaurant(userEmail, currentRestaurant.getName());
         canAddReview.set(!hasReviewed);
     }
     

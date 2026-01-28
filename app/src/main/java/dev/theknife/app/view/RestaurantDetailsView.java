@@ -471,13 +471,13 @@ public class RestaurantDetailsView extends VBox {
                                 sessionContext.getCurrentUser() != null && 
                                 ("Restaurateur".equals(sessionContext.getCurrentUser().getRole()) || "Ristoratore".equals(sessionContext.getCurrentUser().getRole()));
         
-        // Restaurateurs cannot add favorites
         favoriteButton.setVisible(isLoggedIn && !isRestaurateur);
-        favoriteButton.setDisable(!isLoggedIn || isRestaurateur || currentRestaurantName == null);
+        dev.theknife.app.model.Restaurant current = viewModel.getCurrentRestaurant();
+        favoriteButton.setDisable(!isLoggedIn || isRestaurateur || current == null || current.getId() == null);
         
-        if (isLoggedIn && !isRestaurateur && currentRestaurantName != null) {
-            String userName = sessionContext.getCurrentUserName();
-            boolean isFavorite = favoriteService.isFavorite(userName, currentRestaurantName);
+        if (isLoggedIn && !isRestaurateur && current != null && current.getId() != null) {
+            String userEmail = sessionContext.getCurrentUser() != null ? sessionContext.getCurrentUser().getEmail() : null;
+            boolean isFavorite = userEmail != null && favoriteService.isFavorite(userEmail, current.getId());
             
             if (isFavorite) {
                 favoriteButton.setText("★ Rimuovi dai Preferiti");
@@ -489,15 +489,11 @@ public class RestaurantDetailsView extends VBox {
         }
     }
     
-    /**
-     * Handle favorite button click
-     */
     private void onToggleFavorite() {
-        if (!sessionContext.isLoggedIn() || currentRestaurantName == null) {
-            return;
-        }
+        if (!sessionContext.isLoggedIn()) return;
+        dev.theknife.app.model.Restaurant current = viewModel.getCurrentRestaurant();
+        if (current == null || current.getId() == null) return;
         
-        // Restaurateurs cannot add favorites
         boolean isRestaurateur = sessionContext.getCurrentUser() != null && 
                                 ("Restaurateur".equals(sessionContext.getCurrentUser().getRole()) || "Ristoratore".equals(sessionContext.getCurrentUser().getRole()));
         if (isRestaurateur) {
@@ -508,14 +504,15 @@ public class RestaurantDetailsView extends VBox {
             return;
         }
         
-        String userName = sessionContext.getCurrentUserName();
-        boolean isFavorite = favoriteService.isFavorite(userName, currentRestaurantName);
+        String userEmail = sessionContext.getCurrentUser() != null ? sessionContext.getCurrentUser().getEmail() : null;
+        if (userEmail == null) return;
+        boolean isFavorite = favoriteService.isFavorite(userEmail, current.getId());
         
         boolean success;
         if (isFavorite) {
-            success = favoriteService.removeFavorite(userName, currentRestaurantName);
+            success = favoriteService.removeFavorite(userEmail, current.getId());
         } else {
-            success = favoriteService.addFavorite(userName, currentRestaurantName);
+            success = favoriteService.addFavorite(userEmail, current.getId());
         }
         
         if (success) {

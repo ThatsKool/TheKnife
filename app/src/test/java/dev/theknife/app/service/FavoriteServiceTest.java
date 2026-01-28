@@ -75,28 +75,23 @@ class FavoriteServiceTest {
 
     @Test
     void testRemoveAllFavorites() {
-        String user = "testUser";
-        String rest1 = "Pizza Place";
-        String rest2 = "Burger Joint";
+        String userEmail = "test@test.com";
+        Long rest1Id = 1L;
+        Long rest2Id = 2L;
 
-        // 1. Add 2 favorites
-        assertTrue(favoriteService.addFavorite(user, rest1));
-        assertTrue(favoriteService.addFavorite(user, rest2));
+        assertTrue(favoriteService.addFavorite(userEmail, rest1Id));
+        assertTrue(favoriteService.addFavorite(userEmail, rest2Id));
 
-        assertEquals(2, favoriteService.getUserFavorites(user).size());
+        assertEquals(2, favoriteService.getUserFavoriteIds(userEmail).size());
 
-        // 2. Remove first favorite
-        assertTrue(favoriteService.removeFavorite(user, rest1));
-        assertEquals(1, favoriteService.getUserFavorites(user).size());
-        assertEquals(rest2, favoriteService.getUserFavorites(user).get(0));
+        assertTrue(favoriteService.removeFavorite(userEmail, rest1Id));
+        assertEquals(1, favoriteService.getUserFavoriteIds(userEmail).size());
+        assertTrue(favoriteService.getUserFavoriteIds(userEmail).contains(rest2Id));
 
-        // 3. Remove second favorite (the last one)
-        assertTrue(favoriteService.removeFavorite(user, rest2));
-        assertEquals(0, favoriteService.getUserFavorites(user).size());
-        
-        // 4. Verify persistence
-        // Reload service to simulate app restart
+        assertTrue(favoriteService.removeFavorite(userEmail, rest2Id));
+        assertEquals(0, favoriteService.getUserFavoriteIds(userEmail).size());
+
         FavoriteService newService = new FavoriteService(fileProvider);
-        assertEquals(0, newService.getUserFavorites(user).size());
+        assertEquals(0, newService.getUserFavoriteIds(userEmail).size());
     }
 }

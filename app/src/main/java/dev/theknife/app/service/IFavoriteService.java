@@ -28,57 +28,50 @@ public interface IFavoriteService {
     /**
      * Aggiunge un ristorante alla lista dei preferiti di un utente.
      * <p>
-     * Se l'associazione esiste già, l'operazione dovrebbe essere idempotente (restituire true
-     * senza duplicare i dati).
+     * Persistenza in locale usa email utente e ID ristorante. Se l'associazione esiste già,
+     * l'operazione è idempotente (restituisce true senza duplicare).
      * </p>
      *
-     * @param userName Il nome utente (identificativo univoco dell'utente).
-     * @param restaurantName Il nome del ristorante (identificativo del ristorante in questo contesto legacy).
+     * @param userEmail Email univoca dell'utente.
+     * @param restaurantId ID univoco del ristorante.
      * @return {@code true} se l'aggiunta ha successo o se la relazione esisteva già;
      *         {@code false} in caso di errori di persistenza o parametri non validi.
      */
-    boolean addFavorite(String userName, String restaurantName);
+    boolean addFavorite(String userEmail, Long restaurantId);
     
     /**
      * Rimuove un ristorante dalla lista dei preferiti di un utente.
      *
-     * @param userName Il nome utente.
-     * @param restaurantName Il nome del ristorante da rimuovere.
+     * @param userEmail Email utente.
+     * @param restaurantId ID del ristorante da rimuovere.
      * @return {@code true} se la rimozione ha successo; {@code false} se la relazione non esisteva
      *         o in caso di errore.
      */
-    boolean removeFavorite(String userName, String restaurantName);
+    boolean removeFavorite(String userEmail, Long restaurantId);
     
     /**
      * Verifica se un ristorante è tra i preferiti di un utente.
-     * <p>
-     * Utilizzato per aggiornare lo stato dell'UI (es. icona cuore pieno/vuoto).
-     * </p>
      *
-     * @param userName Il nome utente.
-     * @param restaurantName Il nome del ristorante.
+     * @param userEmail Email utente.
+     * @param restaurantId ID del ristorante.
      * @return {@code true} se è un preferito, {@code false} altrimenti.
      */
-    boolean isFavorite(String userName, String restaurantName);
+    boolean isFavorite(String userEmail, Long restaurantId);
     
     /**
-     * Recupera i nomi di tutti i ristoranti preferiti di un utente.
+     * Recupera gli ID di tutti i ristoranti preferiti di un utente.
      *
-     * @param userName Il nome utente.
-     * @return Una lista di stringhe contenente i nomi dei ristoranti preferiti.
+     * @param userEmail Email utente.
+     * @return Lista di ID ristoranti preferiti.
      */
-    List<String> getUserFavorites(String userName);
+    List<Long> getUserFavoriteIds(String userEmail);
     
     /**
-     * Recupera le entità {@link FavoriteRestaurant} associate a un utente.
-     * <p>
-     * Rispetto a {@link #getUserFavorites(String)}, questo metodo restituisce l'oggetto
-     * completo che potrebbe contenere metadati aggiuntivi sulla relazione (es. timestamp aggiunta, note).
-     * </p>
+     * Recupera le entità {@link FavoriteRestaurant} associate a un utente (email + restaurantId).
      *
-     * @param userName Il nome utente.
-     * @return Una lista di oggetti {@link FavoriteRestaurant}.
+     * @param userEmail Email utente.
+     * @return Lista di {@link FavoriteRestaurant} con userEmail e restaurantId impostati.
      */
-    List<FavoriteRestaurant> getUserFavoriteRestaurants(String userName);
+    List<FavoriteRestaurant> getUserFavoriteRestaurants(String userEmail);
 }
 
