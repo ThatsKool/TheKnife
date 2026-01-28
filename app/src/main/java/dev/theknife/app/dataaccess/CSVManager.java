@@ -19,6 +19,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringReader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -171,7 +172,7 @@ public class CSVManager<T> {
         Path csvPath = getCSVPath();
         File file = csvPath.toFile();
         if (!file.exists()) {
-            try (PrintWriter writer = new PrintWriter(new FileWriter(file))) {
+            try (PrintWriter writer = new PrintWriter(new FileWriter(file, StandardCharsets.UTF_8))) {
                 writer.println(headerLine);
             }
         }
@@ -191,7 +192,7 @@ public class CSVManager<T> {
         File file = csvPath.toFile();
         logger.debug("Saving to disk: " + file.getAbsolutePath());
         synchronized (cache) {
-            try (PrintWriter writer = new PrintWriter(new FileWriter(file))) {
+            try (PrintWriter writer = new PrintWriter(new FileWriter(file, StandardCharsets.UTF_8))) {
                 writer.println(headerLine);
                 for (T item : cache) {
                     writer.println(serializer.apply(item));
@@ -296,7 +297,7 @@ public class CSVManager<T> {
         if (!file.exists()) return;
         synchronized (cache) {
             cache.clear();
-            try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            try (BufferedReader reader = new BufferedReader(new FileReader(file, StandardCharsets.UTF_8))) {
                 String line;
                 boolean firstLine = true;
                 while ((line = reader.readLine()) != null) {

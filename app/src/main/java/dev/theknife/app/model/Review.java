@@ -323,25 +323,26 @@ public final class Review {
     /**
      * Restituisce una rappresentazione stringa della recensione in formato CSV.
      * <p>
-     * Formato: id,restaurantId,userEmail,restaurantName,userName,rating,comment,reviewDate,isVerified,restaurateurResponse,clientResponse
+     * Ordine allineato all'header reviews.csv: Id, RestaurantName, UserName, Rating, Comment, ReviewDate, IsVerified, RestaurateurResponse, ClientResponse.
      * </p>
      *
-     * @return Stringa rappresentativa della recensione in formato CSV.
+     * @return Stringa rappresentativa della recensione in formato CSV (9 colonne).
      */
     @Override
     public String toString() {
-        return String.format("%s,%s,%s,%s,%s,%d,%s,%s,%s,%s,%s",
-            id, 
-            restaurantId != null ? restaurantId.toString() : "",
-            userEmail != null ? userEmail : "",
+        String commentSafe = comment != null ? comment.replace(",", ";") : "";
+        String restResp = restaurateurResponse != null ? restaurateurResponse.replace(",", ";") : "";
+        String clientResp = clientResponse != null ? clientResponse.replace(",", ";") : "";
+        return String.format("%s,%s,%s,%d,%s,%s,%s,%s,%s",
+            id != null ? id : "",
             restaurantName != null ? restaurantName : "",
             userName != null ? userName : "",
-            rating, 
-            comment.replace(",", ";"), // Replace commas in comment to avoid CSV issues
-            reviewDate.format(DATE_FORMATTER),
+            rating,
+            commentSafe,
+            reviewDate != null ? reviewDate.format(DATE_FORMATTER) : "",
             isVerified,
-            restaurateurResponse != null ? restaurateurResponse.replace(",", ";") : "", // Replace commas in response
-            clientResponse != null ? clientResponse.replace(",", ";") : "" // Replace commas in client response
+            restResp,
+            clientResp
         );
     }
     

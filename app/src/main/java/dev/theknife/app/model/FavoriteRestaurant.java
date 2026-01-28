@@ -106,17 +106,17 @@ public final class FavoriteRestaurant {
     /**
      * Restituisce una rappresentazione in stringa dell'oggetto.
      * <p>
-     * Utilizzato principalmente per il debug e per la serializzazione CSV semplice.
-     * Formato: "userEmail,restaurantId".
+     * Utilizzato per la serializzazione CSV (header: UserName,RestaurantName).
+     * Se sono presenti userEmail e restaurantId li usa; altrimenti usa userName e restaurantName (legacy).
      * </p>
      *
-     * @return Stringa rappresentativa.
+     * @return Stringa nel formato CSV per favorites.csv.
      */
     @Override
     public String toString() {
-        return String.format("%s,%s", 
-            userEmail != null ? userEmail : "", 
-            restaurantId != null ? restaurantId.toString() : "");
+        String first = userEmail != null ? userEmail : (userName != null ? userName : "");
+        String second = restaurantId != null ? String.valueOf(restaurantId) : (restaurantName != null ? restaurantName : "");
+        return String.format("%s,%s", first, second);
     }
 
     /**
