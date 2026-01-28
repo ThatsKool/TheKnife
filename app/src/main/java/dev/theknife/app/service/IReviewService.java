@@ -99,16 +99,16 @@ public interface IReviewService {
     String getRatingDistributionText(String restaurantName);
     
     /**
-     * Verifica se un utente ha già recensito un determinato ristorante.
+     * Verifica se un utente ha già recensito un determinato ristorante (identificato per email).
      * <p>
      * Spesso utilizzato per limitare a una sola recensione per utente/ristorante.
      * </p>
      * 
-     * @param userName Il nome utente.
+     * @param userEmail L'email dell'utente.
      * @param restaurantName Il nome del ristorante.
      * @return {@code true} se l'utente ha già lasciato una recensione, {@code false} altrimenti.
      */
-    boolean hasUserReviewedRestaurant(String userName, String restaurantName);
+    boolean hasUserReviewedRestaurant(String userEmail, String restaurantName);
     
     /**
      * Recupera le recensioni più recenti (es. degli ultimi 30 giorni).

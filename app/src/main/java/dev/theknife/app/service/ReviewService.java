@@ -102,13 +102,25 @@ public class ReviewService implements IReviewService {
     /**
      * {@inheritDoc}
      * <p>
-     * Utilizza l'indice {@code byRestaurantName} per recuperare i dati in O(1) (accesso alla mappa)
-     * e poi ordina i risultati in O(N log N).
+     * Recupera le recensioni dall'indice per nome (legacy) e per ID ristorante (nuovo formato).
+     * Le recensioni salvate in CSV hanno solo restaurantId; il nome si risolve tramite
+     * restaurantService per ottenere le recensioni da byRestaurantId.
      * </p>
      */
     @Override
     public List<Review> getReviewsForRestaurant(String restaurantName) {
-        List<Review> list = byRestaurantName.getOrDefault(restaurantName, new ArrayList<>());
+        List<Review> list = new ArrayList<>(byRestaurantName.getOrDefault(restaurantName, new ArrayList<>()));
+        dev.theknife.app.model.Restaurant r = restaurantService.findRestaurantByName(restaurantName);
+        if (r != null && r.getId() != null) {
+            List<Review> byId = byRestaurantId.get(r.getId());
+            if (byId != null) {
+                for (Review rev : byId) {
+                    if (!list.stream().anyMatch(ex -> ex.getId() != null && ex.getId().equals(rev.getId()))) {
+                        list.add(rev);
+                    }
+                }
+            }
+        }
         return list.stream()
                 .sorted(Comparator.comparing(Review::getReviewDate).reversed())
                 .collect(Collectors.toList());
@@ -225,10 +237,11 @@ public class ReviewService implements IReviewService {
      * {@inheritDoc}
      */
     @Override
-    public boolean hasUserReviewedRestaurant(String userName, String restaurantName) {
+    public boolean hasUserReviewedRestaurant(String userEmail, String restaurantName) {
+        if (userEmail == null || userEmail.isBlank()) return false;
         return getReviewsForRestaurant(restaurantName).stream()
-                .anyMatch(review -> (review.getUserName() != null && review.getUserName().equals(userName))
-                    || (review.getUserEmail() != null && review.getUserEmail().equals(userName)));
+                .anyMatch(review -> review.getUserEmail() != null
+                        && review.getUserEmail().equalsIgnoreCase(userEmail.trim()));
     }
 
     /**
@@ -292,7 +305,10 @@ public class ReviewService implements IReviewService {
      */
     @Override
     public boolean updateReview(Review review, String requestorEmail) {
-        if (review == null || review.getId() == null || !review.isValid()) {
+        // Per l'aggiornamento bastano id, rating e commento (le recensioni da CSV possono avere userName/restaurantName null)
+        if (review == null || review.getId() == null || review.getId().trim().isEmpty()
+                || review.getRating() < 1 || review.getRating() > 5
+                || review.getComment() == null || review.getComment().trim().isEmpty()) {
             logger.warn("Attempted to update invalid review");
             return false;
         }
@@ -508,11 +524,12 @@ public class ReviewService implements IReviewService {
             if (fields == null || fields.length < 7) {
                 return null;
             }
-            // Nuovo formato: Id, RestaurantId, UserEmail, Rating, Comment, ReviewDate, IsVerified, RestaurateurResponse, ClientResponse (9 campi)
+            // Nuovo formato: Id, RestaurantId, UserEmail, Rating, Comment, ReviewDate, IsVerified, RestaurateurResponse, ClientResponse
             String f1 = safeField(fields, 1);
             String f2 = safeField(fields, 2);
-            boolean newFormat = fields.length >= 9
-                    && !f1.isEmpty() && f1.matches("\\d+")
+            // NON facciamo affidamento sui campi di coda (possono mancare se vuoti),
+            // ci basta sapere che il secondo campo è un ID numerico e il terzo è un'email.
+            boolean newFormat = !f1.isEmpty() && f1.matches("\\d+")
                     && f2.contains("@");
 
             if (newFormat) {
