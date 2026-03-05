@@ -21,6 +21,7 @@ import javafx.scene.text.FontWeight;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 import dev.theknife.app.view.ReviewView;
+import dev.theknife.app.viewmodel.FavoriteRestaurantsViewModel;
 
 import java.util.List;
 import javafx.concurrent.Task;
@@ -66,19 +67,9 @@ public class FavoriteRestaurantsView extends VBox {
     private static final String BORDER_GRAY = "#E0E0E0";
     
     /**
-     * Servizio per la gestione dei ristoranti preferiti.
+     * ViewModel che incapsula l'accesso ai servizi dei preferiti.
      */
-    private final IFavoriteService favoriteService;
-    
-    /**
-     * Servizio per l'accesso ai dettagli dei ristoranti.
-     */
-    private final IRestaurantService restaurantService;
-    
-    /**
-     * Servizio per l'accesso alle recensioni (utilizzato per calcolare la media voti).
-     */
-    private final dev.theknife.app.service.IReviewService reviewService;
+    private final FavoriteRestaurantsViewModel viewModel;
     
     /**
      * Componente grafico per la lista dei preferiti.
@@ -139,9 +130,11 @@ public class FavoriteRestaurantsView extends VBox {
         this.homeScene = homeScene;
         this.container = container;
         this.sessionContext = sessionContext;
-        this.favoriteService = container.get(IFavoriteService.class);
-        this.restaurantService = container.get(IRestaurantService.class);
-        this.reviewService = container.get(dev.theknife.app.service.IReviewService.class);
+        this.viewModel = new FavoriteRestaurantsViewModel(
+            container.get(IFavoriteService.class),
+            container.get(IRestaurantService.class),
+            container.get(dev.theknife.app.service.IReviewService.class)
+        );
         
         this.favoritesListView = new ListView<>();
         this.backButton = new Button("← Indietro");
@@ -273,12 +266,12 @@ public class FavoriteRestaurantsView extends VBox {
         Task<javafx.collections.ObservableList<Restaurant>> task = new Task<>() {
             @Override
             protected javafx.collections.ObservableList<Restaurant> call() throws Exception {
-                List<dev.theknife.app.model.FavoriteRestaurant> favorites = favoriteService.getUserFavoriteRestaurants(userEmail);
+                List<dev.theknife.app.model.FavoriteRestaurant> favorites = viewModel.getUserFavoriteRestaurants(userEmail);
                 javafx.collections.ObservableList<Restaurant> restaurants = javafx.collections.FXCollections.observableArrayList();
                 if (favorites != null) {
                     for (dev.theknife.app.model.FavoriteRestaurant fav : favorites) {
                         if (fav.getRestaurantId() != null) {
-                            Restaurant r = restaurantService.findRestaurantById(fav.getRestaurantId());
+                            Restaurant r = viewModel.findRestaurantById(fav.getRestaurantId());
                             if (r != null) restaurants.add(r);
                         }
                     }
@@ -389,13 +382,13 @@ public class FavoriteRestaurantsView extends VBox {
                 statsRow.setAlignment(Pos.CENTER_LEFT);
                 
                 // Numero di recensioni
-                int reviewCount = reviewService.getReviewCount(restaurant.getName());
+                int reviewCount = viewModel.getReviewCount(restaurant.getName());
                 Label countLabel = new Label(reviewCount + (reviewCount == 1 ? " recensione" : " recensioni"));
                 countLabel.setFont(Font.font("Segoe UI", 13));
                 countLabel.setStyle("-fx-text-fill: " + TEXT_GRAY + ";");
                 
                 // Valutazione (Valutazione dell'utente)
-                double averageRating = reviewService.getAverageRating(restaurant.getName());
+                double averageRating = viewModel.getAverageRating(restaurant.getName());
                 Label ratingLabel = new Label(String.format("%.1f", averageRating));
                 ratingLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 14));
                 ratingLabel.setStyle("-fx-text-fill: #e67e22;");
@@ -534,7 +527,7 @@ public class FavoriteRestaurantsView extends VBox {
                 AnimationUtils.applyButtonHoverAnimation(removeButton);
                 removeButton.setOnAction(e -> {
                     String userEmail = sessionContext != null && sessionContext.getCurrentUser() != null ? sessionContext.getCurrentUser().getEmail() : null;
-                    if (userEmail != null && restaurant.getId() != null && favoriteService.removeFavorite(userEmail, restaurant.getId())) {
+                    if (userEmail != null && restaurant.getId() != null && viewModel.removeFavorite(userEmail, restaurant.getId())) {
                         loadFavorites();
                     }
                 });
@@ -559,7 +552,7 @@ public class FavoriteRestaurantsView extends VBox {
      * @param detailsView La vista dei dettagli del ristorante.
      */
     private void showAddReviewDialog(dev.theknife.app.model.Restaurant restaurant, RestaurantDetailsView detailsView) {
-        ReviewView reviewView = new ReviewView(reviewService, sessionContext);
+        ReviewView reviewView = new ReviewView(container.get(dev.theknife.app.service.IReviewService.class), sessionContext);
         
         // Configura la navigazione
         reviewView.setCancelButtonAction(() -> {
@@ -601,7 +594,7 @@ public class FavoriteRestaurantsView extends VBox {
      * @param detailsView La vista dei dettagli del ristorante.
      */
     private void showEditReviewDialog(dev.theknife.app.model.Restaurant restaurant, dev.theknife.app.model.Review review, RestaurantDetailsView detailsView) {
-        ReviewView reviewView = new ReviewView(reviewService, sessionContext);
+        ReviewView reviewView = new ReviewView(container.get(dev.theknife.app.service.IReviewService.class), sessionContext);
         
         // Configura la navigazione
         reviewView.setCancelButtonAction(() -> {
@@ -637,7 +630,7 @@ public class FavoriteRestaurantsView extends VBox {
         try {
             String email = sessionContext != null && sessionContext.getCurrentUser() != null
                 ? sessionContext.getCurrentUser().getEmail() : null;
-            boolean success = reviewService.deleteReview(review.getId(), email);
+            boolean success = container.get(dev.theknife.app.service.IReviewService.class).deleteReview(review.getId(), email);
             if (success) {
                 javafx.application.Platform.runLater(() -> {
                     detailsView.refresh();

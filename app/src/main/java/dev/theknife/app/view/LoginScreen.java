@@ -30,6 +30,8 @@ import java.util.concurrent.CompletableFuture;
 import javafx.animation.PauseTransition;
 import javafx.util.Duration;
 
+import dev.theknife.app.viewmodel.LoginViewModel;
+
 /**
  * View per la schermata di accesso (Login).
  * Gestisce validazione, sessione e navigazione verso la Home.
@@ -63,6 +65,8 @@ public class LoginScreen {
     private final IUserService userService;
     private final SessionContext sessionContext;
 
+    private final LoginViewModel viewModel;
+
     // COSTRUTTORI
     /**
      * Costruttore semplificato per la schermata di login.
@@ -90,6 +94,7 @@ public class LoginScreen {
         this.onHomeSceneRefresh = onHomeSceneRefresh;
         this.userService = userService;
         this.sessionContext = sessionContext;
+        this.viewModel = userService != null ? new LoginViewModel(userService) : null;
 
         VBox root = new VBox(25);
         root.setAlignment(Pos.CENTER);
@@ -252,14 +257,11 @@ public class LoginScreen {
 
         CompletableFuture.supplyAsync(() -> {
             try {
-                if (userService != null && userService.validateCredentials(email, password)) {
-                    return userService.findUserByEmail(email);
-                }
+                return viewModel != null ? viewModel.login(email, password) : null;
             } catch (Exception ex) {
                 Logger.getLogger(LoginScreen.class).error("Login error", ex);
                 throw new RuntimeException(ex);
             }
-            return null;
         }).thenAcceptAsync(loggedInUser -> {
             setLoadingState(false);
             if (loggedInUser != null && sessionContext != null) {

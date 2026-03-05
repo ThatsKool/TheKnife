@@ -27,6 +27,8 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
 
+import dev.theknife.app.viewmodel.UserProfileViewModel;
+
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -57,6 +59,7 @@ public class UserProfileView {
     private static final String ERROR_RED = "#D32F2F";
  
     private final Logger logger = Logger.getLogger(UserProfileView.class);
+    private final UserProfileViewModel viewModel;
     
     // COSTRUTTORI
     /**
@@ -68,6 +71,7 @@ public class UserProfileView {
     public UserProfileView(IUserService userService, SessionContext sessionContext) {
         this.userService = userService;
         this.sessionContext = sessionContext;
+        this.viewModel = new UserProfileViewModel(userService, sessionContext);
     }
     
     // METODI
@@ -77,7 +81,7 @@ public class UserProfileView {
      * @return Il nodo root del pannello profilo.
      */
     public Node createView() {
-        User currentUser = sessionContext != null ? sessionContext.getCurrentUser() : null;
+        User currentUser = viewModel.getCurrentUser();
         if (currentUser == null) {
             return new Label("Utente non loggato");
         }
@@ -201,20 +205,7 @@ public class UserProfileView {
                 
                 dev.theknife.app.util.GeoValidator.validateCoordinates(lat, lon);
                 
-                User updatedUser = new User(
-                    currentUser.getName(),
-                    currentUser.getSurname(),
-                    currentUser.getEmail(),
-                    currentUser.getPassword(),
-                    currentUser.getDateOfBirth(),
-                    lat,
-                    lon,
-                    currentUser.getRole()
-                );
-                
-                // Save
-                userService.updateUser(updatedUser);
-                if (sessionContext != null) sessionContext.setCurrentUser(updatedUser);
+                viewModel.updateCurrentUserLocation(lat, lon);
                 
                 // Success
                 ModalManager.getInstance().close(); // Close profile modal

@@ -9,9 +9,8 @@ package dev.theknife.app.view;
 import dev.theknife.app.container.DependencyContainer;
 import dev.theknife.app.model.Restaurant;
 import dev.theknife.app.service.IRestaurantService;
-import dev.theknife.app.service.RestaurantQueryService;
 import dev.theknife.app.session.SessionContext;
-import dev.theknife.app.viewmodel.RestaurantListViewModel;
+import dev.theknife.app.viewmodel.RestaurantFormViewModel;
 import dev.theknife.app.config.AppConfig;
 import dev.theknife.app.view.ModalManager;
 import javafx.geometry.Insets;
@@ -68,9 +67,9 @@ public class RestaurantFormView extends VBox {
     private final IRestaurantService restaurantService;
     
     /**
-     * ViewModel per la logica di business.
+     * ViewModel per la logica di business del form.
      */
-    private final RestaurantListViewModel viewModel;
+    private final RestaurantFormViewModel viewModel;
     
     /**
      * Genera lo stile CSS per lo sfondo.
@@ -121,8 +120,10 @@ public class RestaurantFormView extends VBox {
         this.container = container;
         this.sessionContext = sessionContext;
         this.restaurantService = container.get(IRestaurantService.class);
-        RestaurantQueryService restaurantQueryService = container.get(RestaurantQueryService.class);
-        this.viewModel = new RestaurantListViewModel(this.restaurantService, restaurantQueryService, sessionContext);
+        this.viewModel = new RestaurantFormViewModel(
+            this.restaurantService,
+            container.get(dev.theknife.app.service.RestaurantQueryService.class)
+        );
         
         // Initialize fields
         this.nameField = new TextField();
@@ -473,7 +474,7 @@ public class RestaurantFormView extends VBox {
             return;
         }
         
-        boolean success = restaurantService.addRestaurant(restaurant);
+        boolean success = viewModel.addRestaurant(restaurant);
         
         if (success) {
             ModalManager.getInstance().showInfo(

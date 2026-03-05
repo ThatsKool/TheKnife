@@ -40,6 +40,8 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Supplier;
 import javafx.util.Duration;
 
+import dev.theknife.app.viewmodel.RegisterViewModel;
+
 /**
  * Controller JavaFX per la schermata di registrazione utenti.
  * <p>
@@ -100,6 +102,8 @@ public class RegisterScreen {
     private Runnable onHomeSceneRefresh;
     private final IUserService userService;
     private final SessionContext sessionContext;
+
+    private final RegisterViewModel viewModel;
     private static final Logger logger = Logger.getLogger(RegisterScreen.class);
 
     // COSTRUTTORI
@@ -140,6 +144,7 @@ public class RegisterScreen {
         this.onHomeSceneRefresh = onHomeSceneRefresh;
         this.userService = userService;
         this.sessionContext = sessionContext;
+        this.viewModel = userService != null ? new RegisterViewModel(userService) : null;
         
         VBox root = new VBox(20);
         root.setAlignment(Pos.CENTER);
@@ -635,13 +640,13 @@ public class RegisterScreen {
         }
         
         // Valida il servizio utente
-        if (userService == null) {
+        if (viewModel == null) {
             statusLabel.setText("Servizio non disponibile. Riprova.");
             return;
         }
         // Valida l'email
         try {
-            if (userService.emailExists(email)) {
+            if (viewModel.emailExists(email)) {
                 statusLabel.setText("Email già registrata! Usa un'altra email o accedi.");
                 return;
             }
@@ -698,7 +703,7 @@ public class RegisterScreen {
 
         try {
             // Salva l'utente
-            userService.saveUser(user);
+            viewModel.saveUser(user);
             if (sessionContext != null) sessionContext.setCurrentUser(user);
             statusLabel.setText("Registrazione riuscita! Accesso effettuato.");
             statusLabel.setStyle("-fx-text-fill: #2E7D32;");

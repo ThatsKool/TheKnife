@@ -25,6 +25,8 @@ import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 import javafx.concurrent.Task;
 
+import dev.theknife.app.viewmodel.MyRestaurantsViewModel;
+
 import java.util.List;
 
 /**
@@ -63,14 +65,9 @@ public class MyRestaurantsView extends VBox {
     private final dev.theknife.app.util.Logger logger = dev.theknife.app.util.Logger.getLogger(MyRestaurantsView.class);
     
     /**
-     * Servizio per l'accesso ai dati dei ristoranti.
+     * ViewModel che incapsula la logica sui ristoranti del ristoratore.
      */
-    private final IRestaurantService restaurantService;
-    
-    /**
-     * Servizio per l'accesso alle recensioni.
-     */
-    private final IReviewService reviewService;
+    private final MyRestaurantsViewModel viewModel;
     
     /**
      * Componente grafico per la visualizzazione della lista ristoranti.
@@ -125,8 +122,10 @@ public class MyRestaurantsView extends VBox {
         this.homeScene = homeScene;
         this.container = container;
         this.sessionContext = sessionContext;
-        this.restaurantService = container.get(IRestaurantService.class);
-        this.reviewService = container.get(IReviewService.class);
+        this.viewModel = new MyRestaurantsViewModel(
+            container.get(IRestaurantService.class),
+            container.get(IReviewService.class)
+        );
         
         this.restaurantsListView = new ListView<>();
         this.statusLabel = new Label();
@@ -296,9 +295,9 @@ public class MyRestaurantsView extends VBox {
             protected Void call() {
                 int batchSize = 100;
                 int offset = 0;
-                int total = restaurantService.getTotalRestaurantCount();
+                int total = viewModel.getTotalRestaurantCount();
                 while (offset < total && !isCancelled()) {
-                    List<Restaurant> batch = restaurantService.getRestaurantsRange(offset, batchSize);
+                    List<Restaurant> batch = viewModel.getRestaurantsRange(offset, batchSize);
                     if (batch.isEmpty()) {
                         break;
                     }
@@ -478,8 +477,8 @@ public class MyRestaurantsView extends VBox {
                 }
                 
                 // Valutazione
-                double averageRating = reviewService.getAverageRating(restaurant.getName());
-                int reviewCount = reviewService.getReviewCount(restaurant.getName());
+                double averageRating = viewModel.getAverageRating(restaurant.getName());
+                int reviewCount = viewModel.getReviewCount(restaurant.getName());
                 
                 HBox ratingBox = new HBox(5);
                 ratingBox.setAlignment(Pos.CENTER_LEFT);
@@ -582,7 +581,7 @@ public class MyRestaurantsView extends VBox {
      * @param detailsView La vista dei dettagli del ristorante.
      */
     private void showAddReviewDialog(Restaurant restaurant, RestaurantDetailsView detailsView) {
-        dev.theknife.app.view.ReviewView reviewView = new dev.theknife.app.view.ReviewView(reviewService, sessionContext);
+        dev.theknife.app.view.ReviewView reviewView = new dev.theknife.app.view.ReviewView(container.get(IReviewService.class), sessionContext);
         
         // Configura la navigazione
         reviewView.setCancelButtonAction(() -> {
@@ -624,7 +623,7 @@ public class MyRestaurantsView extends VBox {
      * @param detailsView La vista dei dettagli del ristorante.
      */
     private void showEditReviewDialog(Restaurant restaurant, dev.theknife.app.model.Review review, RestaurantDetailsView detailsView) {
-        dev.theknife.app.view.ReviewView reviewView = new dev.theknife.app.view.ReviewView(reviewService, sessionContext);
+        dev.theknife.app.view.ReviewView reviewView = new dev.theknife.app.view.ReviewView(container.get(IReviewService.class), sessionContext);
         
         // Configura la navigazione
         reviewView.setCancelButtonAction(() -> {
@@ -660,7 +659,7 @@ public class MyRestaurantsView extends VBox {
         try {
             String email = sessionContext != null && sessionContext.getCurrentUser() != null
                 ? sessionContext.getCurrentUser().getEmail() : null;
-            boolean success = reviewService.deleteReview(review.getId(), email);
+            boolean success = viewModel.deleteReview(review, email);
             if (success) {
                 javafx.application.Platform.runLater(() -> {
                     detailsView.refresh();
