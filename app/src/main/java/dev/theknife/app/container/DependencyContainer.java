@@ -170,8 +170,12 @@ public class DependencyContainer {
             
             // Registra i servizi con le loro dipendenze (sia interfacce che classi concrete)
             RestaurantService restaurantService = new RestaurantService(fileProvider);
+            RestaurantQueryService restaurantQueryService = new RestaurantQueryService(restaurantService);
+            restaurantService.setRestaurantQueryService(restaurantQueryService);
+
             registerSingleton(IRestaurantService.class, restaurantService);
             registerSingleton(RestaurantService.class, restaurantService);
+            registerSingleton(RestaurantQueryService.class, restaurantQueryService);
             
             UserService userService = new UserService(fileProvider);
             registerSingleton(IUserService.class, userService);
