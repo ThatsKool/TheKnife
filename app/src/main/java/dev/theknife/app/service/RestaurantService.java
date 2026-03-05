@@ -116,7 +116,7 @@ public class RestaurantService implements IRestaurantService {
      *
      * @param restaurantQueryService istanza singleton di {@link RestaurantQueryService}.
      */
-    void setRestaurantQueryService(RestaurantQueryService restaurantQueryService) {
+    public void setRestaurantQueryService(RestaurantQueryService restaurantQueryService) {
         this.restaurantQueryService = restaurantQueryService;
     }
 
