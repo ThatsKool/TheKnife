@@ -9,6 +9,7 @@ package dev.theknife.app.viewmodel;
 import dev.theknife.app.model.Restaurant;
 import dev.theknife.app.model.User;
 import dev.theknife.app.service.IRestaurantService;
+import dev.theknife.app.service.RestaurantQueryService;
 import dev.theknife.app.session.SessionContext;
 import dev.theknife.app.util.Logger;
 import javafx.beans.property.*;
@@ -44,6 +45,7 @@ import java.util.concurrent.CompletableFuture;
 public class RestaurantListViewModel {
     // CAMPI
     private final IRestaurantService restaurantService;
+    private final RestaurantQueryService restaurantQueryService;
     private final SessionContext sessionContext;
     private final Logger logger;
     private final ObservableList<Restaurant> displayedRestaurants;
@@ -77,10 +79,14 @@ public class RestaurantListViewModel {
      * Costruisce il ViewModel iniettando il servizio dei ristoranti e il contesto di sessione.
      *
      * @param restaurantService Il servizio per l'accesso ai dati dei ristoranti.
+     * @param restaurantQueryService Il servizio per le operazioni di query (ricerca, distanza, ordinamento).
      * @param sessionContext Contesto di sessione (nessun getInstance).
      */
-    public RestaurantListViewModel(IRestaurantService restaurantService, SessionContext sessionContext) {
+    public RestaurantListViewModel(IRestaurantService restaurantService,
+                                   RestaurantQueryService restaurantQueryService,
+                                   SessionContext sessionContext) {
         this.restaurantService = restaurantService;
+        this.restaurantQueryService = restaurantQueryService;
         this.sessionContext = sessionContext;
         this.logger = Logger.getLogger(RestaurantListViewModel.class);
         this.displayedRestaurants = FXCollections.observableArrayList();
@@ -520,24 +526,6 @@ public class RestaurantListViewModel {
     }
 
     /**
-     * Analizza una stringa di filtro distanza e restituisce il valore massimo in km.
-     * <p>
-     * Gestisce stringhe come "&lt; 5 km" o "&lt; 10 km" estraendo il valore numerico.
-     * </p>
-     *
-     * @param filter La stringa del filtro distanza.
-     * @return Il valore massimo in km, o null se il filtro non è valido o rappresenta "Tutte le distanze".
-     */
-    private Double parseMaxDistance(String filter) {
-        if (filter == null || filter.isEmpty() || filter.equals("Tutte le distanze")) return null;
-        try {
-            return Double.parseDouble(filter.replace("<", "").replace("km", "").trim());
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    /**
      * Esegue il caricamento di tutti i ristoranti applicando i filtri attivi.
      * <p>
      * Il metodo è eseguito in modo asincrono tramite {@link CompletableFuture} per non bloccare
@@ -594,35 +582,27 @@ public class RestaurantListViewModel {
                 pipeline = pipeline.filter(this::hasOnlineBooking);
             }
             
+            List<Restaurant> filtered = pipeline.collect(Collectors.toList());
+
             boolean isLoggedIn = sessionContext.isLoggedIn() && sessionContext.getCurrentUser() != null;
+            List<Restaurant> finalResult;
             if (isLoggedIn) {
                 User user = sessionContext.getCurrentUser();
                 double userLat = user.getLatitude();
                 double userLon = user.getLongitude();
-                
-                // Transform to include distance
-                pipeline = pipeline.map(r -> {
-                    double dist = calculateDistance(userLat, userLon, r.getLatitude(), r.getLongitude());
-                    return r.withDistance(dist);
-                });
-                
-                // Filter by distance if needed
-                if (currentDistanceFilter != null && !currentDistanceFilter.isEmpty()) {
-                    Double maxDist = parseMaxDistance(currentDistanceFilter);
-                    if (maxDist != null) {
-                        pipeline = pipeline.filter(r -> r.getDistanceKm() != null && r.getDistanceKm() <= maxDist);
-                    }
-                }
-                
-                // Sort by distance
-                pipeline = pipeline.sorted(Comparator.comparing(Restaurant::getDistanceKm, Comparator.nullsLast(Comparator.naturalOrder())));
-                
+
+                finalResult = restaurantQueryService.applyDistanceFilterAndSort(
+                    filtered,
+                    userLat,
+                    userLon,
+                    currentDistanceFilter
+                );
+
                 javafx.application.Platform.runLater(() -> sortingStatus.set("Ordinati per vicinanza"));
             } else {
+                finalResult = filtered;
                 javafx.application.Platform.runLater(() -> sortingStatus.set(""));
             }
-
-            final List<Restaurant> finalResult = pipeline.collect(Collectors.toList());
             
             javafx.application.Platform.runLater(() -> {
                 displayedRestaurants.setAll(finalResult);
@@ -631,28 +611,6 @@ public class RestaurantListViewModel {
                 logger.debug("Displayed restaurants count: " + displayedRestaurants.size());
             });
         });
-    }
-
-    /**
-     * Calcola la distanza in km tra due punti geografici usando la formula di Haversine.
-     *
-     * @param lat1 Latitudine punto 1
-     * @param lon1 Longitudine punto 1
-     * @param lat2 Latitudine punto 2
-     * @param lon2 Longitudine punto 2
-     * @return Distanza in chilometri, arrotondata a 1 decimale.
-     */
-    private double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
-        final int R = 6371; // Raggio della Terra in km
-        double latDistance = Math.toRadians(lat2 - lat1);
-        double lonDistance = Math.toRadians(lon2 - lon1);
-        double a = Math.sin(latDistance / 2) * Math.sin(latDistance / 2)
-                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
-                * Math.sin(lonDistance / 2) * Math.sin(lonDistance / 2);
-        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        double distance = R * c;
-        // Arrotonda a 1 cifra decimale
-        return Math.round(distance * 10.0) / 10.0;
     }
 
     /**

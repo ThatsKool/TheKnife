@@ -107,6 +107,77 @@ public class RestaurantQueryService {
     }
 
     /**
+     * Calcola la distanza in km tra due coordinate geografiche usando la formula di Haversine.
+     * <p>
+     * Replica l'implementazione originaria del {@code RestaurantListViewModel} inclusa
+     * l'arrotondatura a una cifra decimale, così da non cambiare il comportamento
+     * osservato nella UI.
+     * </p>
+     *
+     * @param lat1 Latitudine punto 1
+     * @param lon1 Longitudine punto 1
+     * @param lat2 Latitudine punto 2
+     * @param lon2 Longitudine punto 2
+     * @return Distanza in chilometri, arrotondata a 1 decimale.
+     */
+    public double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
+        final int R = 6371; // Raggio della Terra in km
+        double latDistance = Math.toRadians(lat2 - lat1);
+        double lonDistance = Math.toRadians(lon2 - lon1);
+        double a = Math.sin(latDistance / 2) * Math.sin(latDistance / 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                * Math.sin(lonDistance / 2) * Math.sin(lonDistance / 2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        double distance = R * c;
+        // Arrotonda a 1 cifra decimale
+        return Math.round(distance * 10.0) / 10.0;
+    }
+
+    /**
+     * Applica il filtro di distanza (se presente) e l'ordinamento per distanza crescente.
+     * <p>
+     * Riceve una lista già filtrata in base agli altri criteri (cucina, posizione,
+     * prezzo, servizi) e arricchisce ogni ristorante con il campo di distanza in km.
+     * </p>
+     *
+     * @param restaurants        lista di ristoranti su cui applicare il filtro distanza.
+     * @param userLat            latitudine dell'utente.
+     * @param userLon            longitudine dell'utente.
+     * @param currentDistanceFilter stringa del filtro distanza (es. "&lt; 5 km").
+     * @return lista filtrata e ordinata per distanza crescente.
+     */
+    public List<Restaurant> applyDistanceFilterAndSort(List<Restaurant> restaurants,
+                                                       double userLat,
+                                                       double userLon,
+                                                       String currentDistanceFilter) {
+        if (restaurants == null || restaurants.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<Restaurant> withDistance = restaurants.stream()
+                .filter(r -> r != null)
+                .map(r -> {
+                    double dist = calculateDistance(userLat, userLon, r.getLatitude(), r.getLongitude());
+                    return r.withDistance(dist);
+                })
+                .collect(Collectors.toList());
+
+        Double maxDist = parseMaxDistance(currentDistanceFilter);
+        if (maxDist != null) {
+            withDistance = withDistance.stream()
+                    .filter(r -> r.getDistanceKm() != null && r.getDistanceKm() <= maxDist)
+                    .collect(Collectors.toList());
+        }
+
+        withDistance.sort(
+                java.util.Comparator.comparing(Restaurant::getDistanceKm,
+                        java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder()))
+        );
+
+        return withDistance;
+    }
+
+    /**
      * Verifica se un ristorante corrisponde ai criteri di ricerca.
      * <p>
      * Logica estratta da {@link RestaurantService} per centralizzare il filtraggio
@@ -122,6 +193,26 @@ public class RestaurantQueryService {
                 || (restaurant.getCuisine() != null && restaurant.getCuisine().toLowerCase().contains(term))
                 || (restaurant.getLocation() != null && restaurant.getLocation().toLowerCase().contains(term))
                 || (restaurant.getAward() != null && restaurant.getAward().toLowerCase().contains(term));
+    }
+
+    /**
+     * Analizza una stringa di filtro distanza e restituisce il valore massimo in km.
+     * <p>
+     * Gestisce stringhe come "&lt; 5 km" o "&lt; 10 km" estraendo il valore numerico.
+     * </p>
+     *
+     * @param filter La stringa del filtro distanza.
+     * @return Il valore massimo in km, o null se il filtro non è valido o rappresenta "Tutte le distanze".
+     */
+    private Double parseMaxDistance(String filter) {
+        if (filter == null || filter.isEmpty() || filter.equals("Tutte le distanze")) {
+            return null;
+        }
+        try {
+            return Double.parseDouble(filter.replace("<", "").replace("km", "").trim());
+        } catch (Exception e) {
+            return null;
+        }
     }
 }
 
