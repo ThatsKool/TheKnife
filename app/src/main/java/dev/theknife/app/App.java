@@ -28,6 +28,7 @@ import javafx.animation.PauseTransition;
 import javafx.util.Duration;
 
 import dev.theknife.app.service.IRestaurantService;
+import dev.theknife.app.service.RestaurantQueryService;
 import dev.theknife.app.session.SessionContext;
 import dev.theknife.app.view.RestaurantListView;
 import dev.theknife.app.viewmodel.RestaurantListViewModel;
@@ -452,7 +453,8 @@ public class App extends Application {
         ));
         browseRestaurantsBtn.setOnAction(e -> {
             IRestaurantService restaurantService = container.get(IRestaurantService.class);
-            RestaurantListViewModel listViewModel = new RestaurantListViewModel(restaurantService, sessionContext);
+            RestaurantQueryService restaurantQueryService = container.get(RestaurantQueryService.class);
+            RestaurantListViewModel listViewModel = new RestaurantListViewModel(restaurantService, restaurantQueryService, sessionContext);
             RestaurantListView restaurantListView = new RestaurantListView(primaryStage, homeScene, listViewModel, container, sessionContext);
             primaryStage.setScene(restaurantListView.getScene());
         });
