@@ -59,6 +59,9 @@ public class RestaurantService implements IRestaurantService {
     /** Logger per il tracciamento delle operazioni e degli errori. */
     private final Logger logger;
 
+    /** Servizio dedicato alle query (listing, ricerca, paginazione). */
+    private RestaurantQueryService restaurantQueryService;
+
     /** Cache principale dei ristoranti (Source of Truth in memoria). */
     private final List<Restaurant> restaurants;
     
@@ -106,6 +109,29 @@ public class RestaurantService implements IRestaurantService {
             }
         }
     }
+
+    /**
+     * Imposta il servizio di query per delegare le operazioni di listing/ricerca.
+     * Deve essere configurato dal container di dipendenze dopo la costruzione.
+     *
+     * @param restaurantQueryService istanza singleton di {@link RestaurantQueryService}.
+     */
+    void setRestaurantQueryService(RestaurantQueryService restaurantQueryService) {
+        this.restaurantQueryService = restaurantQueryService;
+    }
+
+    /**
+     * Espone la lista in memoria dei ristoranti alla logica di query.
+     * <p>
+     * Metodo di supporto a visibilità di package per mantenere l'incapsulamento
+     * rispetto agli altri layer.
+     * </p>
+     *
+     * @return lista interna dei ristoranti.
+     */
+    List<Restaurant> getAllRestaurantsInternal() {
+        return restaurants;
+    }
     
     // METODI
     /**
@@ -117,11 +143,7 @@ public class RestaurantService implements IRestaurantService {
      */
     @Override
     public List<Restaurant> getRestaurantsRange(int offset, int limit) {
-        if (limit <= 0 || offset >= restaurants.size()) {
-            return Collections.emptyList();
-        }
-        int end = Math.min(offset + limit, restaurants.size());
-        return new ArrayList<>(restaurants.subList(offset, end));
+        return restaurantQueryService.getRestaurantsRange(offset, limit);
     }
 
     /**
@@ -129,7 +151,7 @@ public class RestaurantService implements IRestaurantService {
      */
     @Override
     public int getTotalRestaurantCount() {
-        return restaurants.size();
+        return restaurantQueryService.getTotalRestaurantCount();
     }
 
     /**
@@ -140,26 +162,7 @@ public class RestaurantService implements IRestaurantService {
      * </p>
      */
     public List<Restaurant> searchRestaurantsRange(String searchTerm, int offset, int limit) {
-        if (searchTerm == null || searchTerm.trim().isEmpty()) {
-            return getRestaurantsRange(offset, limit);
-        }
-
-        String term = searchTerm.toLowerCase().trim();
-        List<Restaurant> allMatches = restaurants.stream()
-                .filter(r -> r != null && matchesSearchTerm(r, term))
-                .collect(Collectors.toList());
-
-        int startIndex = Math.min(offset, allMatches.size());
-        int endIndex = Math.min(offset + limit, allMatches.size());
-
-        List<Restaurant> pageResults = startIndex < endIndex
-            ? allMatches.subList(startIndex, endIndex)
-            : new ArrayList<>();
-
-        logger.debug("Search found " + allMatches.size() + " total matches for '" + searchTerm +
-                "', returning page " + (limit == 0 ? 1 : (offset / Math.max(1, limit) + 1)) +
-                " with " + pageResults.size() + " results");
-        return pageResults;
+        return restaurantQueryService.searchRestaurantsRange(searchTerm, offset, limit);
     }
 
     /**
@@ -352,23 +355,6 @@ public class RestaurantService implements IRestaurantService {
         return result;
     }
 
-    /**
-     * Verifica se un ristorante corrisponde ai criteri di ricerca.
-     * <p>
-     * Controlla SOLO il nome del ristorante.
-     * </p>
-     *
-     * @param restaurant Il ristorante da verificare.
-     * @param term Il termine di ricerca (già normalizzato in lowercase).
-     * @return {@code true} se c'è corrispondenza, {@code false} altrimenti.
-     */
-    private boolean matchesSearchTerm(Restaurant restaurant, String term) {
-        return (restaurant.getName() != null && restaurant.getName().toLowerCase().contains(term))
-            || (restaurant.getCuisine() != null && restaurant.getCuisine().toLowerCase().contains(term))
-            || (restaurant.getLocation() != null && restaurant.getLocation().toLowerCase().contains(term))
-            || (restaurant.getAward() != null && restaurant.getAward().toLowerCase().contains(term));
-    }
-    
     /**
      * Analizza una riga CSV e la converte in un oggetto {@link Restaurant}.
      * <p>
