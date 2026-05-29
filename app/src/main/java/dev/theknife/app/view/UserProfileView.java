@@ -9,6 +9,7 @@ package dev.theknife.app.view;
 import dev.theknife.app.model.User;
 import dev.theknife.app.service.IUserService;
 import dev.theknife.app.session.SessionContext;
+import dev.theknife.app.util.IpLocationDetector;
 import dev.theknife.app.util.Logger;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -30,11 +31,6 @@ import javafx.scene.text.Text;
 import dev.theknife.app.viewmodel.UserProfileViewModel;
 
 import java.io.IOException;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 
 /**
  * Vista per la gestione del profilo utente.
@@ -260,86 +256,25 @@ public class UserProfileView {
      */
     private void autoDetectLocation(TextField latitudeField, TextField longitudeField, Label statusLabel) {
         statusLabel.setText("Rilevamento posizione in corso...");
-        statusLabel.setStyle("-fx-text-fill: #1976D2;"); // Info Blue
+        statusLabel.setStyle("-fx-text-fill: #1976D2;");
         statusLabel.setVisible(true);
-        
-        // Esegui in background per non bloccare la UI
+
         new Thread(() -> {
-            HttpURLConnection con = null;
             try {
-                // Servizio di geolocalizzazione IP gratuito (no API key richiesta per uso limitato)
-                URL url = new URL("http://ip-api.com/json/?fields=lat,lon,status");
-                con = (HttpURLConnection) url.openConnection();
-                con.setRequestMethod("GET");
-                con.setConnectTimeout(5000);
-                con.setReadTimeout(5000);
-                
-                if (con.getResponseCode() != 200) {
-                    throw new IOException("HTTP Error: " + con.getResponseCode());
-                }
-                
-                StringBuilder response = new StringBuilder();
-                try (BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(con.getInputStream(), StandardCharsets.UTF_8))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        response.append(line);
-                    }
-                }
-                
-                String json = response.toString();
-                
-                // Parsing manuale JSON per evitare dipendenze esterne
-                double lat = extractJsonValue(json, "lat");
-                double lon = extractJsonValue(json, "lon");
-                
-                // Aggiorna UI nel thread JavaFX
+                IpLocationDetector.Coordinates coords = IpLocationDetector.detectFromPublicIp();
                 javafx.application.Platform.runLater(() -> {
-                    latitudeField.setText(String.format(java.util.Locale.US, "%.4f", lat));
-                    longitudeField.setText(String.format(java.util.Locale.US, "%.4f", lon));
+                    latitudeField.setText(String.format(java.util.Locale.US, "%.4f", coords.latitude()));
+                    longitudeField.setText(String.format(java.util.Locale.US, "%.4f", coords.longitude()));
                     statusLabel.setText("Posizione rilevata con successo!");
-                    statusLabel.setStyle("-fx-text-fill: " + PRIMARY_GREEN + ";"); // Success Green
+                    statusLabel.setStyle("-fx-text-fill: " + PRIMARY_GREEN + ";");
                 });
-                
             } catch (Exception e) {
                 logger.error("Auto-detect location failed", e);
                 javafx.application.Platform.runLater(() -> {
                     statusLabel.setText("Connessione assente! Inserisci le coordinate manualmente.");
-                    statusLabel.setStyle("-fx-text-fill: " + ERROR_RED + ";"); // Error Red
+                    statusLabel.setStyle("-fx-text-fill: " + ERROR_RED + ";");
                 });
-            } finally {
-                if (con != null) con.disconnect();
             }
         }).start();
-    }
-    
-    /**
-     * Estrae un valore numerico da una stringa JSON semplice.
-     * <p>
-     * Esegue un parsing manuale del JSON per evitare dipendenze esterne.
-     * </p>
-     *
-     * @param json La stringa JSON da analizzare.
-     * @param key La chiave del valore da estrarre.
-     * @return Il valore numerico estratto, o 0.0 se non trovato o non valido.
-     */
-    private double extractJsonValue(String json, String key) {
-        try {
-            String searchKey = "\"" + key + "\":";
-            int startIdx = json.indexOf(searchKey);
-            if (startIdx == -1) return 0.0;
-            
-            startIdx += searchKey.length();
-            int endIdx = json.indexOf(",", startIdx);
-            if (endIdx == -1) endIdx = json.indexOf("}", startIdx);
-            
-            if (endIdx > startIdx) {
-                String valueStr = json.substring(startIdx, endIdx).trim();
-                return Double.parseDouble(valueStr);
-            }
-        } catch (Exception e) {
-            // Ignore parse errors
-        }
-        return 0.0;
     }
 }

@@ -12,8 +12,12 @@ import dev.theknife.app.model.User;
 import dev.theknife.app.service.IUserService;
 import dev.theknife.app.session.SessionContext;
 import dev.theknife.app.util.AnimationUtils;
+import dev.theknife.app.util.IpLocationDetector;
 import dev.theknife.app.util.Logger;
-import dev.theknife.app.util.PasswordHasher;
+import dev.theknife.app.viewmodel.RegisterViewModel.RegisterFormData;
+import dev.theknife.app.viewmodel.RegisterViewModel.PasswordCriteria;
+import dev.theknife.app.viewmodel.RegisterViewModel.RegistrationResult;
+import dev.theknife.app.viewmodel.RegisterViewModel.RegistrationStatus;
 import javafx.animation.PauseTransition;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
@@ -29,13 +33,8 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.SVGPath;
-import java.io.IOException;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.util.Locale;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Supplier;
 import javafx.util.Duration;
@@ -619,188 +618,78 @@ public class RegisterScreen {
      * </p>
      */
     private void handleRegistration() {
-        // Valida gli input
-        if (nameField.getText().trim().isEmpty() || 
-            surnameField.getText().trim().isEmpty() || 
-            emailField.getText().trim().isEmpty() ||
-            passwordField.getText().trim().isEmpty() ||
-            latitudeField.getText().trim().isEmpty() ||
-            longitudeField.getText().trim().isEmpty()) {
-            statusLabel.setText("Inserisci tutti i campi obbligatori!");
-            AnimationUtils.shake(statusLabel);
-            return;
-        }
-        
-        // Valida il formato dell'email
-        String email = emailField.getText().trim();
-        if (!email.contains("@") || !email.contains(".")) {
-            statusLabel.setText("Inserisci un indirizzo email valido!");
-            AnimationUtils.shake(emailField);
-            return;
-        }
-        
-        // Valida il servizio utente
-        if (viewModel == null) {
+        if (viewModel == null || !viewModel.isServiceAvailable()) {
             statusLabel.setText("Servizio non disponibile. Riprova.");
             return;
         }
-        // Valida l'email
-        try {
-            if (viewModel.emailExists(email)) {
-                statusLabel.setText("Email già registrata! Usa un'altra email o accedi.");
-                return;
-            }
-        } catch (IOException e) {
-            statusLabel.setText("Errore nel controllo della disponibilità dell'email. Riprova.");
-            logger.error("Email check failed", e);
-            return;
-        }
 
-        // Valida la password
         String password = isPasswordVisible ? passwordVisibleField.getText() : passwordField.getText();
-        if (!isPasswordValid(password)) {
-            statusLabel.setText("Password non valida! Deve contenere almeno 8 caratteri, 1 lettera maiuscola, 1 numero e 1 carattere speciale (! @ /).");
-            return;
-        }
-        
-        // Valida le coordinate
-        try {
-            double lat = Double.parseDouble(latitudeField.getText().trim());
-            double lon = Double.parseDouble(longitudeField.getText().trim());
-            
-            if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
-                statusLabel.setText("Coordinate non valide! Latitudine: da -90 a 90, Longitudine: da -180 a 180");
-                statusLabel.setStyle("-fx-text-fill: #D32F2F;");
-                return;
-            }
-        } catch (NumberFormatException e) {
-            statusLabel.setText("Formato coordinate non valido!");
-            statusLabel.setStyle("-fx-text-fill: #D32F2F;");
-            return;
-        }
-
-        // Hash della password
-        String hashedPassword = PasswordHasher.hashPassword(password);
-
-        // Mappa il ruolo visualizzato al ruolo interno
-        String displayRole = roleComboBox.getValue();
-        String internalRole = "Client";
-        if ("Ristoratore".equals(displayRole)) {
-            internalRole = "Restaurateur";
-        }
-
-        // Crea l'oggetto utente
-        User user = new User(
-            nameField.getText().trim(),
-            surnameField.getText().trim(),
-            email,
-            hashedPassword,
+        RegisterFormData form = new RegisterFormData(
+            nameField.getText(),
+            surnameField.getText(),
+            emailField.getText(),
+            password,
             dateOfBirthPicker.getValue(),
-            Double.parseDouble(latitudeField.getText().trim()),
-            Double.parseDouble(longitudeField.getText().trim()),
-            internalRole
+            latitudeField.getText(),
+            longitudeField.getText(),
+            roleComboBox.getValue()
         );
 
-        try {
-            // Salva l'utente
-            viewModel.saveUser(user);
-            if (sessionContext != null) sessionContext.setCurrentUser(user);
-            statusLabel.setText("Registrazione riuscita! Accesso effettuato.");
-            statusLabel.setStyle("-fx-text-fill: #2E7D32;");
-            clearFields();
-            PauseTransition pause = new PauseTransition(Duration.seconds(1.5));
-            pause.setOnFinished(ev -> {
-                if (onHomeSceneRefresh != null) onHomeSceneRefresh.run();
-                primaryStage.setScene(homeSceneSupplier.get());
-            });
-            pause.play();
-        } catch (IOException e) {
-            statusLabel.setText("Registrazione fallita! Riprova.");
+        RegistrationResult result = viewModel.register(form);
+        if (!result.isSuccess()) {
+            statusLabel.setText(result.getMessage());
             statusLabel.setStyle("-fx-text-fill: #D32F2F;");
-            logger.error("Registration failed", e);
+            if (result.getStatus() == RegistrationStatus.VALIDATION_ERROR) {
+                String message = result.getMessage();
+                if (message != null && message.contains("campi obbligatori")) {
+                    AnimationUtils.shake(statusLabel);
+                } else if (message != null && message.contains("email valido")) {
+                    AnimationUtils.shake(emailField);
+                }
+            }
+            return;
         }
+
+        User user = result.getUser();
+        if (sessionContext != null) {
+            sessionContext.setCurrentUser(user);
+        }
+        statusLabel.setText("Registrazione riuscita! Accesso effettuato.");
+        statusLabel.setStyle("-fx-text-fill: #2E7D32;");
+        clearFields();
+        PauseTransition pause = new PauseTransition(Duration.seconds(1.5));
+        pause.setOnFinished(ev -> {
+            if (onHomeSceneRefresh != null) {
+                onHomeSceneRefresh.run();
+            }
+            primaryStage.setScene(homeSceneSupplier.get());
+        });
+        pause.play();
     }
 
 
-    /**
-     * Valida la password secondo i criteri definiti.
-     * <p>
-     * - Almeno 8 caratteri
-     * - Almeno 1 lettera maiuscola
-     * - Almeno 1 numero
-     * - Almeno 1 carattere speciale (! @ /)
-     * </p>
-     */
-    /**
-     * Valida la password secondo i criteri definiti.
-     * <p>
-     * - Almeno 8 caratteri
-     * - Almeno 1 lettera maiuscola
-     * - Almeno 1 numero
-     * - Almeno 1 carattere speciale (! @ /)
-     * </p>
-     * @param password La password da validare.
-     * @return {@code true} se rispetta tutti i criteri, altrimenti {@code false}.
-     */
-    private boolean isPasswordValid(String password) {
-        if (password == null || password.length() < 8) {
-            return false;
-        }
-        // Check for at least one uppercase letter
-        boolean hasUppercase = password.chars().anyMatch(Character::isUpperCase);
-        // Check for at least one number
-        boolean hasNumber = password.chars().anyMatch(Character::isDigit);
-        // Check for at least one special character (! @ /)
-        boolean hasSpecialChar = password.chars().anyMatch(ch -> ch == '!' || ch == '@' || ch == '/');
-        
-        return hasUppercase && hasNumber && hasSpecialChar;
-    }
-    
-    /**
-     * Aggiorna l'etichetta dei criteri password con feedback visivo.
-     */
     /**
      * Aggiorna l'etichetta dei criteri password con feedback visivo.
      *
      * @param password La password corrente nel form.
      */
     private void updatePasswordCriteria(String password) {
-        if (password == null || password.isEmpty()) {
-            passwordCriteriaLabel.setText("Criteri password:\n• Almeno 8 caratteri\n• 1 lettera maiuscola\n• 1 numero\n• 1 carattere speciale (! @ /)");
-            passwordCriteriaLabel.setTextFill(Color.web(PRIMARY_GREEN)); // Changed to green dark
+        if (viewModel == null) {
             return;
         }
-        
-        boolean hasMinLength = password.length() >= 8;
-        boolean hasUppercase = password.chars().anyMatch(Character::isUpperCase);
-        boolean hasNumber = password.chars().anyMatch(Character::isDigit);
-        boolean hasSpecialChar = password.chars().anyMatch(ch -> ch == '!' || ch == '@' || ch == '/');
-        
-        StringBuilder criteria = new StringBuilder("Criteri password:\n");
-        if (hasMinLength) {
-            criteria.append("✓ Almeno 8 caratteri\n");
-        } else {
-            criteria.append("✗ Almeno 8 caratteri\n");
+        if (password == null || password.isEmpty()) {
+            passwordCriteriaLabel.setText("Criteri password:\n• Almeno 8 caratteri\n• 1 lettera maiuscola\n• 1 numero\n• 1 carattere speciale (! @ /)");
+            passwordCriteriaLabel.setTextFill(Color.web(PRIMARY_GREEN));
+            return;
         }
-        if (hasUppercase) {
-            criteria.append("✓ 1 lettera maiuscola\n");
-        } else {
-            criteria.append("✗ 1 lettera maiuscola\n");
-        }
-        if (hasNumber) {
-            criteria.append("✓ 1 numero\n");
-        } else {
-            criteria.append("✗ 1 numero\n");
-        }
-        if (hasSpecialChar) {
-            criteria.append("✓ 1 carattere speciale (! @ /)");
-        } else {
-            criteria.append("✗ 1 carattere speciale (! @ /)");
-        }
-        
-        passwordCriteriaLabel.setText(criteria.toString());
-        
-        // Always use green dark color for password criteria
+
+        PasswordCriteria criteria = viewModel.evaluatePassword(password);
+        StringBuilder label = new StringBuilder("Criteri password:\n");
+        label.append(criteria.minLength() ? "✓" : "✗").append(" Almeno 8 caratteri\n");
+        label.append(criteria.uppercase() ? "✓" : "✗").append(" 1 lettera maiuscola\n");
+        label.append(criteria.number() ? "✓" : "✗").append(" 1 numero\n");
+        label.append(criteria.specialChar() ? "✓" : "✗").append(" 1 carattere speciale (! @ /)");
+        passwordCriteriaLabel.setText(label.toString());
         passwordCriteriaLabel.setTextFill(Color.web(PRIMARY_GREEN));
     }
     
@@ -871,86 +760,25 @@ public class RegisterScreen {
      */
     private void autoDetectLocation() {
         statusLabel.setText("Rilevamento posizione in corso...");
-        statusLabel.setStyle("-fx-text-fill: #1976D2;"); // Info Blue
-        
-        // Esegui in background per non bloccare la UI
+        statusLabel.setStyle("-fx-text-fill: #1976D2;");
+
         new Thread(() -> {
-            HttpURLConnection con = null;
             try {
-                // Servizio di geolocalizzazione IP gratuito (no API key richiesta per uso limitato)
-                URL url = new URL("http://ip-api.com/json/?fields=lat,lon,status");
-                con = (HttpURLConnection) url.openConnection();
-                con.setRequestMethod("GET");
-                con.setConnectTimeout(5000);
-                con.setReadTimeout(5000);
-                
-                if (con.getResponseCode() != 200) {
-                    throw new IOException("HTTP Error: " + con.getResponseCode());
-                }
-                
-                StringBuilder response = new StringBuilder();
-                try (BufferedReader reader = new BufferedReader(
-                        new InputStreamReader(con.getInputStream(), StandardCharsets.UTF_8))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        response.append(line);
-                    }
-                }
-                
-                String json = response.toString();
-                
-                // Parsing manuale JSON per evitare dipendenze esterne
-                double lat = extractJsonValue(json, "lat");
-                double lon = extractJsonValue(json, "lon");
-                
-                // Aggiorna UI nel thread JavaFX
+                IpLocationDetector.Coordinates coords = IpLocationDetector.detectFromPublicIp();
                 javafx.application.Platform.runLater(() -> {
-                    latitudeField.setText(String.format(java.util.Locale.US, "%.4f", lat));
-                    longitudeField.setText(String.format(java.util.Locale.US, "%.4f", lon));
+                    latitudeField.setText(String.format(Locale.US, "%.4f", coords.latitude()));
+                    longitudeField.setText(String.format(Locale.US, "%.4f", coords.longitude()));
                     statusLabel.setText("Posizione rilevata con successo!");
-                    statusLabel.setStyle("-fx-text-fill: #2E7D32;"); // Success Green
+                    statusLabel.setStyle("-fx-text-fill: #2E7D32;");
                 });
-                
             } catch (Exception e) {
                 logger.error("Auto-detect location failed", e);
                 javafx.application.Platform.runLater(() -> {
                     statusLabel.setText("Connessione assente! Inserisci le coordinate manualmente.");
-                    statusLabel.setStyle("-fx-text-fill: #D32F2F; -fx-font-weight: bold;"); // Error Red + Bold
+                    statusLabel.setStyle("-fx-text-fill: #D32F2F; -fx-font-weight: bold;");
                 });
-            } finally {
-                if (con != null) con.disconnect();
             }
         }).start();
-    }
-    
-    /**
-     * Estrae un valore numerico da una stringa JSON semplice.
-     * <p>
-     * Esegue un parsing manuale del JSON per evitare dipendenze esterne.
-     * </p>
-     *
-     * @param json La stringa JSON da analizzare.
-     * @param key La chiave del valore da estrarre.
-     * @return Il valore numerico estratto, o 0.0 se non trovato o non valido.
-     */
-    private double extractJsonValue(String json, String key) {
-        try {
-            String searchKey = "\"" + key + "\":";
-            int startIdx = json.indexOf(searchKey);
-            if (startIdx == -1) return 0.0;
-            
-            startIdx += searchKey.length();
-            int endIdx = json.indexOf(",", startIdx);
-            if (endIdx == -1) endIdx = json.indexOf("}", startIdx);
-            
-            if (endIdx > startIdx) {
-                String valueStr = json.substring(startIdx, endIdx).trim();
-                return Double.parseDouble(valueStr);
-            }
-        } catch (Exception e) {
-            // Ignore parse errors
-        }
-        return 0.0;
     }
 
     /**
