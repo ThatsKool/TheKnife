@@ -9,9 +9,11 @@ package dev.theknife.app.view;
 import dev.theknife.app.App;
 import dev.theknife.app.container.DependencyContainer;
 import dev.theknife.app.model.Restaurant;
+import dev.theknife.app.model.Review;
 import dev.theknife.app.service.IFavoriteService;
 import dev.theknife.app.service.IRestaurantService;
 import dev.theknife.app.service.IReviewService;
+import dev.theknife.app.session.SessionContext;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
@@ -23,9 +25,8 @@ import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 import dev.theknife.app.view.ReviewView;
 import dev.theknife.app.viewmodel.FavoriteRestaurantsViewModel;
+import dev.theknife.app.viewmodel.FavoriteRestaurantsViewModel.FavoritesScreenState;
 
-import java.util.List;
-import javafx.concurrent.Task;
 import javafx.application.Platform;
 import dev.theknife.app.util.AnimationUtils;
 
@@ -37,8 +38,7 @@ import dev.theknife.app.util.AnimationUtils;
  * visualizzare le card dei ristoranti e permette la rimozione rapida dai preferiti.
  * </p>
  * <p>
- * Implementa il pattern MVVM interagendo direttamente con il {@link IFavoriteService}
- * per il recupero e la gestione dei dati.
+ * Implementa il pattern MVVM delegando logica e servizi a {@link FavoriteRestaurantsViewModel}.
  * </p>
  * <p>
  * <b>Funzionalità principali:</b>
@@ -100,7 +100,7 @@ public class FavoriteRestaurantsView extends VBox {
     private Stage primaryStage;
     private Scene homeScene;
     private final DependencyContainer container;
-    private final dev.theknife.app.session.SessionContext sessionContext;
+    private final SessionContext sessionContext;
     
     /**
      * Genera lo stile CSS per lo sfondo a pattern.
@@ -126,7 +126,7 @@ public class FavoriteRestaurantsView extends VBox {
      */
     public FavoriteRestaurantsView(Stage primaryStage, Scene homeScene,
                                    DependencyContainer container,
-                                   dev.theknife.app.session.SessionContext sessionContext) {
+                                   SessionContext sessionContext) {
         this.primaryStage = primaryStage;
         this.homeScene = homeScene;
         this.container = container;
@@ -134,7 +134,8 @@ public class FavoriteRestaurantsView extends VBox {
         this.viewModel = new FavoriteRestaurantsViewModel(
             container.get(IFavoriteService.class),
             container.get(IRestaurantService.class),
-            container.get(IReviewService.class)
+            container.get(IReviewService.class),
+            sessionContext
         );
         
         this.favoritesListView = new ListView<>();
@@ -143,7 +144,8 @@ public class FavoriteRestaurantsView extends VBox {
         this.emptyLabel = new Label("Nessun ristorante preferito. Aggiungine alcuni dai dettagli del ristorante!");
         
         setupUI();
-        loadFavorites();
+        bindViewModel();
+        viewModel.loadFavorites();
     }
     
     /**
@@ -224,92 +226,55 @@ public class FavoriteRestaurantsView extends VBox {
     }
     
     /**
-     * Carica i ristoranti preferiti dell'utente corrente in modo asincrono.
-     * <p>
-     * Se l'utente non è loggato o è un ristoratore, mostra un messaggio appropriato.
-     * </p>
+     * Collega le property del ViewModel ai componenti UI.
      */
-    private void loadFavorites() {
-        if (sessionContext == null) return;
-        if (sessionContext.isLoggedIn() && sessionContext.getCurrentUser() != null && 
-            ("Restaurateur".equalsIgnoreCase(sessionContext.getCurrentUser().getRole()) || "Ristoratore".equalsIgnoreCase(sessionContext.getCurrentUser().getRole()))) {
-            emptyLabel.setText("I Ristoratori non possono aggiungere ristoranti ai preferiti.");
-            emptyLabel.setVisible(true);
-            favoritesListView.setVisible(false);
-            if (loadingBox != null) loadingBox.setVisible(false);
-            return;
-        }
-        
-        if (!sessionContext.isLoggedIn()) {
-            emptyLabel.setText("Accedi per vedere i tuoi ristoranti preferiti.");
-            emptyLabel.setVisible(true);
-            favoritesListView.setVisible(false);
-            if (loadingBox != null) loadingBox.setVisible(false);
-            return;
-        }
-        
-        if (loadingBox != null) {
-            loadingBox.setVisible(true);
-            AnimationUtils.fadeIn(loadingBox);
-        }
-        favoritesListView.setVisible(false);
-        emptyLabel.setVisible(false);
-        
-        String userEmail = sessionContext.getCurrentUser() != null ? sessionContext.getCurrentUser().getEmail() : null;
-        if (userEmail == null) {
-            if (loadingBox != null) loadingBox.setVisible(false);
-            emptyLabel.setText("Effettua l'accesso per vedere i tuoi preferiti.");
-            emptyLabel.setVisible(true);
-            favoritesListView.setVisible(false);
-            return;
-        }
-        
-        Task<javafx.collections.ObservableList<Restaurant>> task = new Task<>() {
-            @Override
-            protected javafx.collections.ObservableList<Restaurant> call() throws Exception {
-                List<dev.theknife.app.model.FavoriteRestaurant> favorites = viewModel.getUserFavoriteRestaurants(userEmail);
-                javafx.collections.ObservableList<Restaurant> restaurants = javafx.collections.FXCollections.observableArrayList();
-                if (favorites != null) {
-                    for (dev.theknife.app.model.FavoriteRestaurant fav : favorites) {
-                        if (fav.getRestaurantId() != null) {
-                            Restaurant r = viewModel.findRestaurantById(fav.getRestaurantId());
-                            if (r != null) restaurants.add(r);
-                        }
-                    }
+    private void bindViewModel() {
+        viewModel.loadingProperty().addListener((obs, wasLoading, isLoading) -> {
+            if (loadingBox != null) {
+                loadingBox.setVisible(isLoading);
+                if (isLoading) {
+                    AnimationUtils.fadeIn(loadingBox);
                 }
-                return restaurants;
             }
-        };
-        
-        task.setOnSucceeded(e -> {
-            if (loadingBox != null) loadingBox.setVisible(false);
-            
-            javafx.collections.ObservableList<Restaurant> result = task.getValue();
-            if (result == null || result.isEmpty()) {
-                emptyLabel.setText("Nessun ristorante preferito. Aggiungine alcuni dai dettagli del ristorante!");
+        });
+
+        viewModel.screenStateProperty().addListener((obs, oldState, newState) ->
+            updateUIForScreenState(newState));
+    }
+
+    /**
+     * Aggiorna visibilità e contenuto dei componenti in base allo stato del ViewModel.
+     */
+    private void updateUIForScreenState(FavoritesScreenState state) {
+        if (state == null) {
+            return;
+        }
+        switch (state) {
+            case LOADING -> {
+                emptyLabel.setVisible(false);
+                favoritesListView.setVisible(false);
+            }
+            case LOADED_WITH_DATA -> {
+                if (loadingBox != null) {
+                    loadingBox.setVisible(false);
+                }
+                emptyLabel.setVisible(false);
+                favoritesListView.setItems(viewModel.getFavoriteRestaurants());
+                favoritesListView.setVisible(true);
+                AnimationUtils.slideInFromBottom(favoritesListView, 600);
+            }
+            case RESTAURATEUR_NOT_ALLOWED, LOGIN_REQUIRED, EMAIL_MISSING, LOADED_EMPTY, LOAD_ERROR -> {
+                if (loadingBox != null) {
+                    loadingBox.setVisible(false);
+                }
+                emptyLabel.setText(viewModel.getStatusMessage());
                 emptyLabel.setVisible(true);
                 AnimationUtils.fadeIn(emptyLabel);
                 favoritesListView.setVisible(false);
                 favoritesListView.getItems().clear();
-            } else {
-                emptyLabel.setVisible(false);
-                favoritesListView.setItems(result);
-                favoritesListView.setVisible(true);
-                // Animazione per l'apparizione della lista
-                AnimationUtils.slideInFromBottom(favoritesListView, 600);
             }
-        });
-        
-        task.setOnFailed(e -> {
-            if (loadingBox != null) loadingBox.setVisible(false);
-            emptyLabel.setText("Errore nel caricamento dei preferiti.");
-            emptyLabel.setVisible(true);
-            favoritesListView.setVisible(false);
-            Throwable ex = task.getException();
-            if (ex != null) ex.printStackTrace();
-        });
-        
-        new Thread(task).start();
+            default -> { }
+        }
     }
     
     /**
@@ -491,8 +456,7 @@ public class FavoriteRestaurantsView extends VBox {
                         deleteReview(review, detailsView);
                     });
                     
-                    String userName = sessionContext != null ? sessionContext.getCurrentUserName() : null;
-                    detailsView.loadRestaurantDetails(restaurant.getName(), userName);
+                    detailsView.loadRestaurantDetails(restaurant.getName(), viewModel.getCurrentUserName());
                     
                     Scene detailsScene = App.createSceneWithModal(detailsView, 1000, 700);
                     primaryStage.setScene(detailsScene);
@@ -527,9 +491,8 @@ public class FavoriteRestaurantsView extends VBox {
                 ));
                 AnimationUtils.applyButtonHoverAnimation(removeButton);
                 removeButton.setOnAction(e -> {
-                    String userEmail = sessionContext != null && sessionContext.getCurrentUser() != null ? sessionContext.getCurrentUser().getEmail() : null;
-                    if (userEmail != null && restaurant.getId() != null && viewModel.removeFavorite(userEmail, restaurant.getId())) {
-                        loadFavorites();
+                    if (restaurant.getId() != null && viewModel.removeFavoriteForCurrentUser(restaurant.getId())) {
+                        viewModel.loadFavorites();
                     }
                 });
                 
@@ -552,7 +515,7 @@ public class FavoriteRestaurantsView extends VBox {
      * @param restaurant Il ristorante per cui aggiungere la recensione.
      * @param detailsView La vista dei dettagli del ristorante.
      */
-    private void showAddReviewDialog(dev.theknife.app.model.Restaurant restaurant, RestaurantDetailsView detailsView) {
+    private void showAddReviewDialog(Restaurant restaurant, RestaurantDetailsView detailsView) {
         ReviewView reviewView = new ReviewView(container.get(IReviewService.class), sessionContext);
         
         // Configura la navigazione
@@ -571,11 +534,10 @@ public class FavoriteRestaurantsView extends VBox {
             }
         });
         
-        String userName = sessionContext != null ? sessionContext.getCurrentUserName() : null;
+        String userName = viewModel.getCurrentUserName();
         if (userName == null) {
-            // Mostra un errore - l'utente deve essere loggato
             ModalManager.getInstance().showWarning(
-                "Accesso Richiesto", 
+                "Accesso Richiesto",
                 "Devi effettuare l'accesso per aggiungere una recensione"
             );
             return;
@@ -594,7 +556,7 @@ public class FavoriteRestaurantsView extends VBox {
      * @param review La recensione da modificare.
      * @param detailsView La vista dei dettagli del ristorante.
      */
-    private void showEditReviewDialog(dev.theknife.app.model.Restaurant restaurant, dev.theknife.app.model.Review review, RestaurantDetailsView detailsView) {
+    private void showEditReviewDialog(Restaurant restaurant, Review review, RestaurantDetailsView detailsView) {
         ReviewView reviewView = new ReviewView(container.get(IReviewService.class), sessionContext);
         
         // Configura la navigazione
@@ -627,24 +589,14 @@ public class FavoriteRestaurantsView extends VBox {
      * @param review La recensione da eliminare.
      * @param detailsView La vista dei dettagli da aggiornare dopo l'eliminazione.
      */
-    private void deleteReview(dev.theknife.app.model.Review review, RestaurantDetailsView detailsView) {
-        try {
-            IReviewService reviewService = container.get(IReviewService.class);
-            String email = sessionContext != null && sessionContext.getCurrentUser() != null
-                ? sessionContext.getCurrentUser().getEmail() : null;
-            boolean success = reviewService.deleteReview(review.getId(), email);
-            if (success) {
-                javafx.application.Platform.runLater(() -> {
-                    detailsView.refresh();
-                    String userName = sessionContext != null ? sessionContext.getCurrentUserName() : null;
-                    detailsView.loadRestaurantDetails(review.getRestaurantName(), userName);
-                });
-            } else {
-                ModalManager.getInstance().showError("Errore", "Impossibile eliminare la recensione. Riprova.");
-            }
-        } catch (Exception e) {
-            dev.theknife.app.util.Logger.getLogger(FavoriteRestaurantsView.class).error("Delete review failed", e);
-            ModalManager.getInstance().showError("Errore", "Si è verificato un errore: " + e.getMessage());
+    private void deleteReview(Review review, RestaurantDetailsView detailsView) {
+        if (viewModel.deleteReview(review)) {
+            Platform.runLater(() -> {
+                detailsView.refresh();
+                detailsView.loadRestaurantDetails(review.getRestaurantName(), viewModel.getCurrentUserName());
+            });
+        } else {
+            ModalManager.getInstance().showError("Errore", "Impossibile eliminare la recensione. Riprova.");
         }
     }
     
@@ -653,7 +605,7 @@ public class FavoriteRestaurantsView extends VBox {
      *
      * @param restaurant Il ristorante di cui mostrare i dettagli.
      */
-    private void showRestaurantDetails(dev.theknife.app.model.Restaurant restaurant) {
+    private void showRestaurantDetails(Restaurant restaurant) {
         RestaurantDetailsView detailsView = new RestaurantDetailsView(container, sessionContext);
         detailsView.setBackButtonAction(() -> {
             primaryStage.setScene(getScene());
@@ -673,8 +625,7 @@ public class FavoriteRestaurantsView extends VBox {
             deleteReview(review, detailsView);
         });
         
-        String userName = sessionContext != null ? sessionContext.getCurrentUserName() : null;
-        detailsView.loadRestaurantDetails(restaurant.getName(), userName);
+        detailsView.loadRestaurantDetails(restaurant.getName(), viewModel.getCurrentUserName());
         
         Scene detailsScene = App.createSceneWithModal(detailsView, 1000, 700);
         primaryStage.setScene(detailsScene);
