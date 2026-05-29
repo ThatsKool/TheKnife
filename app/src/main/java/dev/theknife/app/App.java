@@ -316,7 +316,10 @@ public class App extends Application {
         );
         
         btn.setOnAction(e -> {
-            ModalManager.getInstance().showCustom(new UserProfileView(container.get(dev.theknife.app.service.IUserService.class), sessionContext).createView());
+            dev.theknife.app.viewmodel.UserProfileViewModel profileViewModel =
+                new dev.theknife.app.viewmodel.UserProfileViewModel(
+                    container.get(dev.theknife.app.service.IUserService.class), sessionContext);
+            ModalManager.getInstance().showCustom(new UserProfileView(profileViewModel).createView());
         });
         
         dev.theknife.app.util.AnimationUtils.applyButtonHoverAnimation(btn);

@@ -7,10 +7,11 @@
 package dev.theknife.app.view;
 
 import dev.theknife.app.model.User;
-import dev.theknife.app.service.IUserService;
-import dev.theknife.app.session.SessionContext;
-import dev.theknife.app.util.IpLocationDetector;
-import dev.theknife.app.util.Logger;
+import dev.theknife.app.viewmodel.UserProfileViewModel;
+import dev.theknife.app.viewmodel.UserProfileViewModel.LocationDetectOutcome;
+import dev.theknife.app.viewmodel.UserProfileViewModel.LocationDetectStatus;
+import dev.theknife.app.viewmodel.UserProfileViewModel.LocationUpdateResult;
+import dev.theknife.app.viewmodel.UserProfileViewModel.LocationUpdateStatus;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
@@ -28,53 +29,32 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
 
-import dev.theknife.app.viewmodel.UserProfileViewModel;
-
-import java.io.IOException;
-
 /**
  * Vista per la gestione del profilo utente.
  * <p>
- * Visualizza le informazioni dell'account (nome, email, avatar) e permette
- * all'utente di aggiornare la propria posizione geografica (latitudine/longitudine).
+ * Visualizza le informazioni dell'account e delega logica e servizi a {@link UserProfileViewModel}.
  * </p>
- *
- * @author Federico Barbotti, Oittijo Ahemmed Sarkar, Bennajim Alì
- * @version 1.0
- * @since 1.0
  */
 public class UserProfileView {
-    // CAMPI
-    private final IUserService userService;
-    private final SessionContext sessionContext;
     private static final String PRIMARY_GREEN = "#2E7D32";
     private static final String BACKGROUND_WHITE = "#FFFFFF";
     private static final String TEXT_DARK = "#212121";
     private static final String TEXT_GRAY = "#757575";
     private static final String BORDER_GRAY = "#E0E0E0";
     private static final String ERROR_RED = "#D32F2F";
- 
-    private final Logger logger = Logger.getLogger(UserProfileView.class);
+    private static final String INFO_BLUE = "#1976D2";
+
     private final UserProfileViewModel viewModel;
-    
-    // COSTRUTTORI
+
     /**
-     * Costruisce la vista del profilo utente.
-     * 
-     * @param userService Il servizio per la gestione degli utenti.
-     * @param sessionContext Il contesto della sessione corrente.
+     * @param viewModel ViewModel del profilo utente.
      */
-    public UserProfileView(IUserService userService, SessionContext sessionContext) {
-        this.userService = userService;
-        this.sessionContext = sessionContext;
-        this.viewModel = new UserProfileViewModel(userService, sessionContext);
+    public UserProfileView(UserProfileViewModel viewModel) {
+        this.viewModel = viewModel;
     }
-    
-    // METODI
+
     /**
      * Crea il contenuto del modale profilo.
-     * 
-     * @return Il nodo root del pannello profilo.
      */
     public Node createView() {
         User currentUser = viewModel.getCurrentUser();
@@ -92,83 +72,81 @@ public class UserProfileView {
         root.setMaxWidth(500);
         root.setMinWidth(400);
 
-        // Header
         HBox header = new HBox();
         header.setAlignment(Pos.CENTER_LEFT);
-        
+
         Label titleLabel = new Label("Il tuo Profilo");
         titleLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 24));
         titleLabel.setTextFill(Color.web(PRIMARY_GREEN));
-        
+
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        
+
         Button closeButton = new Button("✕");
-        closeButton.setStyle("-fx-background-color: transparent; -fx-font-size: 18px; -fx-cursor: hand; -fx-text-fill: " + TEXT_GRAY + ";");
+        closeButton.setStyle(
+            "-fx-background-color: transparent; -fx-font-size: 18px; -fx-cursor: hand; -fx-text-fill: " + TEXT_GRAY + ";");
         closeButton.setOnAction(e -> ModalManager.getInstance().close());
-        
+
         header.getChildren().addAll(titleLabel, spacer, closeButton);
 
-        // User Info Section
         HBox userInfo = new HBox(20);
         userInfo.setAlignment(Pos.CENTER_LEFT);
         userInfo.setPadding(new Insets(10, 0, 20, 0));
-        
-        // Avatar (Circle with Initials)
+
         String initial = currentUser.getName().substring(0, 1).toUpperCase();
         Circle avatarCircle = new Circle(30);
         avatarCircle.setFill(Color.web(PRIMARY_GREEN));
         Text avatarText = new Text(initial);
         avatarText.setFill(Color.WHITE);
         avatarText.setFont(Font.font("Segoe UI", FontWeight.BOLD, 24));
-        
+
         javafx.scene.layout.StackPane avatar = new javafx.scene.layout.StackPane(avatarCircle, avatarText);
-        
+
         VBox userDetails = new VBox(5);
         Label nameLabel = new Label(currentUser.getName() + " " + currentUser.getSurname());
         nameLabel.setFont(Font.font("Segoe UI", FontWeight.BOLD, 18));
         nameLabel.setTextFill(Color.web(TEXT_DARK));
-        
+
         Label emailLabel = new Label(currentUser.getEmail());
         emailLabel.setFont(Font.font("Segoe UI", 14));
         emailLabel.setTextFill(Color.web(TEXT_GRAY));
-        
+
         Label roleLabel = new Label(currentUser.getRole());
-        roleLabel.setStyle("-fx-background-color: #E8F5E9; -fx-text-fill: " + PRIMARY_GREEN + "; -fx-padding: 2 8; -fx-background-radius: 10;");
+        roleLabel.setStyle(
+            "-fx-background-color: #E8F5E9; -fx-text-fill: " + PRIMARY_GREEN + "; "
+                + "-fx-padding: 2 8; -fx-background-radius: 10;");
         roleLabel.setFont(Font.font("Segoe UI", 12));
-        
+
         userDetails.getChildren().addAll(nameLabel, emailLabel, roleLabel);
         userInfo.getChildren().addAll(avatar, userDetails);
 
-        // Divider
         javafx.scene.control.Separator separator = new javafx.scene.control.Separator();
 
-        // Location Edit Section
         VBox locationSection = new VBox(15);
         locationSection.setPadding(new Insets(10, 0, 0, 0));
-        
+
         Label locTitle = new Label("Aggiorna Posizione");
         locTitle.setFont(Font.font("Segoe UI", FontWeight.BOLD, 16));
         locTitle.setTextFill(Color.web(TEXT_DARK));
-        
+
         GridPane grid = new GridPane();
         grid.setHgap(15);
         grid.setVgap(10);
-        
-        TextField latField = createStyledTextField(String.valueOf(currentUser.getLatitude()), "Latitudine");
-        TextField lonField = createStyledTextField(String.valueOf(currentUser.getLongitude()), "Longitudine");
-        
+
+        TextField latField = createStyledTextField(
+            String.valueOf(currentUser.getLatitude()), "Latitudine");
+        TextField lonField = createStyledTextField(
+            String.valueOf(currentUser.getLongitude()), "Longitudine");
+
         grid.add(new Label("Latitudine:"), 0, 0);
         grid.add(latField, 0, 1);
         grid.add(new Label("Longitudine:"), 1, 0);
         grid.add(lonField, 1, 1);
-        
-        Label errorLabel = new Label();
-        errorLabel.setTextFill(Color.web(ERROR_RED));
-        errorLabel.setVisible(false);
-        errorLabel.setWrapText(true);
 
-        // Auto-Location Button
+        Label statusLabel = new Label();
+        statusLabel.setWrapText(true);
+        statusLabel.setVisible(false);
+
         Button locationBtn = new Button("📍 Usa la mia posizione attuale");
         locationBtn.setMaxWidth(Double.MAX_VALUE);
         locationBtn.setStyle(
@@ -179,8 +157,8 @@ public class UserProfileView {
             "-fx-background-radius: 8px;" +
             "-fx-cursor: hand;"
         );
-        // dev.theknife.app.util.AnimationUtils.applyButtonHoverAnimation(locationBtn); // Optional if utils available
-        locationBtn.setOnAction(e -> autoDetectLocation(latField, lonField, errorLabel));
+        locationBtn.setOnAction(e -> viewModel.detectLocationAsync(
+            outcome -> applyLocationDetectOutcome(outcome, latField, lonField, statusLabel)));
 
         Button updateButton = new Button("Aggiorna Posizione");
         updateButton.setStyle(
@@ -192,48 +170,55 @@ public class UserProfileView {
             "-fx-cursor: hand;"
         );
         updateButton.setMaxWidth(Double.MAX_VALUE);
-        
-        // Update Action
         updateButton.setOnAction(e -> {
-            try {
-                double lat = Double.parseDouble(latField.getText().replace(",", "."));
-                double lon = Double.parseDouble(lonField.getText().replace(",", "."));
-                
-                dev.theknife.app.util.GeoValidator.validateCoordinates(lat, lon);
-                
-                viewModel.updateCurrentUserLocation(lat, lon);
-                
-                // Success
-                ModalManager.getInstance().close(); // Close profile modal
+            statusLabel.setVisible(false);
+            LocationUpdateResult result = viewModel.updateLocationFromText(
+                latField.getText(), lonField.getText());
+
+            if (result.isSuccess()) {
+                ModalManager.getInstance().close();
                 ModalManager.getInstance().showInfo("Successo", "Posizione aggiornata correttamente!");
-                
-            } catch (NumberFormatException ex) {
-                errorLabel.setText("Inserisci valori numerici validi.");
-                errorLabel.setVisible(true);
-            } catch (IllegalArgumentException ex) {
-                errorLabel.setText(ex.getMessage());
-                errorLabel.setVisible(true);
-            } catch (IOException ex) {
-                logger.error("Failed to update user location", ex);
-                errorLabel.setText("Errore di sistema: impossibile salvare le modifiche.");
-                errorLabel.setVisible(true);
+                return;
+            }
+
+            if (result.getStatus() == LocationUpdateStatus.INVALID_NUMBER
+                || result.getStatus() == LocationUpdateStatus.INVALID_COORDINATES
+                || result.getStatus() == LocationUpdateStatus.SAVE_ERROR) {
+                showStatus(statusLabel, result.getMessage(), ERROR_RED);
             }
         });
 
-        locationSection.getChildren().addAll(locTitle, grid, locationBtn, errorLabel, updateButton);
-        
+        locationSection.getChildren().addAll(locTitle, grid, locationBtn, statusLabel, updateButton);
         root.getChildren().addAll(header, userInfo, separator, locationSection);
-        
+
         return root;
     }
-    
-    /**
-     * Crea un campo di testo stilizzato con valori iniziali e prompt.
-     *
-     * @param initialValue Il valore iniziale del campo.
-     * @param prompt Il testo di prompt da mostrare quando il campo è vuoto.
-     * @return Un TextField configurato con lo stile appropriato.
-     */
+
+    private void applyLocationDetectOutcome(LocationDetectOutcome outcome,
+                                            TextField latitudeField,
+                                            TextField longitudeField,
+                                            Label statusLabel) {
+        switch (outcome.status()) {
+            case LOADING -> {
+                showStatus(statusLabel, outcome.message(), INFO_BLUE);
+            }
+            case SUCCESS -> {
+                latitudeField.setText(viewModel.formatCoordinate(outcome.latitude()));
+                longitudeField.setText(viewModel.formatCoordinate(outcome.longitude()));
+                showStatus(statusLabel, outcome.message(), PRIMARY_GREEN);
+            }
+            case NETWORK_ERROR -> {
+                showStatus(statusLabel, outcome.message(), ERROR_RED);
+            }
+        }
+    }
+
+    private void showStatus(Label statusLabel, String message, String color) {
+        statusLabel.setText(message);
+        statusLabel.setTextFill(Color.web(color));
+        statusLabel.setVisible(true);
+    }
+
     private TextField createStyledTextField(String initialValue, String prompt) {
         TextField field = new TextField(initialValue);
         field.setPromptText(prompt);
@@ -248,33 +233,5 @@ public class UserProfileView {
             "-fx-font-size: 14px;"
         );
         return field;
-    }
-
-    /**
-     * Rileva automaticamente la posizione (lat/lon) basandosi sull'IP pubblico.
-     * Utilizza il servizio gratuito ip-api.com.
-     */
-    private void autoDetectLocation(TextField latitudeField, TextField longitudeField, Label statusLabel) {
-        statusLabel.setText("Rilevamento posizione in corso...");
-        statusLabel.setStyle("-fx-text-fill: #1976D2;");
-        statusLabel.setVisible(true);
-
-        new Thread(() -> {
-            try {
-                IpLocationDetector.Coordinates coords = IpLocationDetector.detectFromPublicIp();
-                javafx.application.Platform.runLater(() -> {
-                    latitudeField.setText(String.format(java.util.Locale.US, "%.4f", coords.latitude()));
-                    longitudeField.setText(String.format(java.util.Locale.US, "%.4f", coords.longitude()));
-                    statusLabel.setText("Posizione rilevata con successo!");
-                    statusLabel.setStyle("-fx-text-fill: " + PRIMARY_GREEN + ";");
-                });
-            } catch (Exception e) {
-                logger.error("Auto-detect location failed", e);
-                javafx.application.Platform.runLater(() -> {
-                    statusLabel.setText("Connessione assente! Inserisci le coordinate manualmente.");
-                    statusLabel.setStyle("-fx-text-fill: " + ERROR_RED + ";");
-                });
-            }
-        }).start();
     }
 }
