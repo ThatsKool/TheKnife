@@ -12,8 +12,6 @@ import dev.theknife.app.model.Restaurant;
 import dev.theknife.app.service.IRestaurantService;
 import dev.theknife.app.service.IReviewService;
 import dev.theknife.app.session.SessionContext;
-import javafx.collections.FXCollections;
-import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
@@ -23,11 +21,10 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
-import javafx.concurrent.Task;
-
 import dev.theknife.app.viewmodel.MyRestaurantsViewModel;
+import dev.theknife.app.viewmodel.MyRestaurantsViewModel.RestaurantsScreenState;
 
-import java.util.List;
+import javafx.application.Platform;
 
 /**
  * View dedicata ai ristoratori per la gestione dei propri ristoranti.
@@ -62,8 +59,6 @@ public class MyRestaurantsView extends VBox {
     private static final String TEXT_GRAY = "#757575";
     private static final String BORDER_GRAY = "#E0E0E0";
     
-    private final dev.theknife.app.util.Logger logger = dev.theknife.app.util.Logger.getLogger(MyRestaurantsView.class);
-    
     /**
      * ViewModel che incapsula la logica sui ristoranti del ristoratore.
      */
@@ -88,11 +83,6 @@ public class MyRestaurantsView extends VBox {
      * Indicatore di caricamento (spinner).
      */
     private final ProgressIndicator loadingIndicator;
-    
-    /**
-     * Lista osservabile per il binding con la UI.
-     */
-    private ObservableList<Restaurant> restaurantList;
     
     /**
      * Genera lo stile CSS per lo sfondo.
@@ -124,7 +114,8 @@ public class MyRestaurantsView extends VBox {
         this.sessionContext = sessionContext;
         this.viewModel = new MyRestaurantsViewModel(
             container.get(IRestaurantService.class),
-            container.get(IReviewService.class)
+            container.get(IReviewService.class),
+            sessionContext
         );
         
         this.restaurantsListView = new ListView<>();
@@ -132,7 +123,8 @@ public class MyRestaurantsView extends VBox {
         this.loadingIndicator = new ProgressIndicator();
         
         setupUI();
-        loadRestaurants();
+        bindViewModel();
+        viewModel.loadRestaurants();
     }
     
     // METODI
@@ -222,10 +214,7 @@ public class MyRestaurantsView extends VBox {
             "-fx-cursor: hand;"
         ));
         dev.theknife.app.util.AnimationUtils.applyButtonHoverAnimation(refreshButton);
-        refreshButton.setOnAction(e -> {
-            logger.info("Refresh triggered");
-            loadRestaurants();
-        });
+        refreshButton.setOnAction(e -> viewModel.loadRestaurants());
         
         headerBox.getChildren().addAll(backButton, titleLabel, refreshButton);
         
@@ -251,95 +240,40 @@ public class MyRestaurantsView extends VBox {
     }
     
     /**
-     * Carica i ristoranti associati all'utente corrente (ristoratore).
-     * <p>
-     * Se l'utente non è loggato o non ha un'email valida, mostra un messaggio di errore.
-     * </p>
+     * Collega le property del ViewModel ai componenti UI.
      */
-    private void loadRestaurants() {
-        logger.info("Loading restaurants for current user");
-        if (sessionContext == null) return;
-        if (!sessionContext.isLoggedIn() || sessionContext.getCurrentUser() == null) {
-            showStatus("Accedi come ristoratore per vedere i tuoi ristoranti.", true);
-            restaurantsListView.setVisible(false);
-            return;
-        }
-        String userEmail = sessionContext.getCurrentUser().getEmail();
-        if (userEmail == null || userEmail.trim().isEmpty()) {
-            showStatus("Errore: Email utente non trovata. Effettua nuovamente l'accesso.", true);
-            restaurantsListView.setVisible(false);
-            return;
-        }
-        
-        String normalizedEmail = userEmail.trim().toLowerCase();
-        
-        //carica i ristoranti per questo ristoratore
-        loadingIndicator.setVisible(true);
-        dev.theknife.app.util.AnimationUtils.fadeIn(loadingIndicator);
-        showStatus("Caricamento dei tuoi ristoranti...", false);
-        restaurantsListView.setVisible(true);
-        restaurantList = FXCollections.observableArrayList();
-        restaurantsListView.setItems(restaurantList);
-        
-        Task<Void> loadTask = new Task<>() {
-            /**
-             * Esegue il caricamento asincrono dei ristoranti del ristoratore corrente.
-             * <p>
-             * Carica i ristoranti in batch per ottimizzare le prestazioni e aggiorna
-             * la lista osservabile nel thread JavaFX.
-             * </p>
-             *
-             * @return null al termine del caricamento.
-             */
-            @Override
-            protected Void call() {
-                int batchSize = 100;
-                int offset = 0;
-                int total = viewModel.getTotalRestaurantCount();
-                while (offset < total && !isCancelled()) {
-                    List<Restaurant> batch = viewModel.getRestaurantsRange(offset, batchSize);
-                    if (batch.isEmpty()) {
-                        break;
-                    }
-                    String targetEmail = normalizedEmail;
-                    List<Restaurant> matches = batch.stream()
-                            .filter(r -> {
-                                String email = r.getRestaurateurEmail();
-                                return email != null && email.trim().toLowerCase().equals(targetEmail);
-                            })
-                            .toList();
-                    if (!matches.isEmpty()) {
-                        javafx.application.Platform.runLater(() -> restaurantList.addAll(matches));
-                    }
-                    offset += batchSize;
-                    updateProgress(Math.min(offset, total), Math.max(total, 1));
-                }
-                return null;
+    private void bindViewModel() {
+        restaurantsListView.setItems(viewModel.getRestaurants());
+        loadingIndicator.progressProperty().bind(viewModel.loadProgressProperty());
+
+        viewModel.loadingProperty().addListener((obs, wasLoading, isLoading) -> {
+            loadingIndicator.setVisible(isLoading);
+            if (isLoading) {
+                dev.theknife.app.util.AnimationUtils.fadeIn(loadingIndicator);
             }
-        };
-        
-        loadingIndicator.progressProperty().bind(loadTask.progressProperty());
-        
-        loadTask.setOnSucceeded(e -> {
-            loadingIndicator.setVisible(false);
-            if (restaurantList.isEmpty()) {
-                showStatus("Nessun ristorante presente. Aggiungi il tuo primo ristorante con il pulsante 'Aggiungi Ristorante'!", true);
+        });
+
+        viewModel.statusMessageProperty().addListener((obs, oldMsg, newMsg) ->
+            showStatus(newMsg, viewModel.isStatusError()));
+
+        viewModel.screenStateProperty().addListener((obs, oldState, newState) ->
+            updateUIForScreenState(newState));
+    }
+
+    /**
+     * Aggiorna visibilità dei componenti in base allo stato del ViewModel.
+     */
+    private void updateUIForScreenState(RestaurantsScreenState state) {
+        if (state == null) {
+            return;
+        }
+        switch (state) {
+            case LOADING -> restaurantsListView.setVisible(true);
+            case LOADED_WITH_DATA -> restaurantsListView.setVisible(true);
+            case LOGIN_REQUIRED, EMAIL_MISSING, LOADED_EMPTY, LOAD_ERROR ->
                 restaurantsListView.setVisible(false);
-            } else {
-                showStatus("Trovati " + restaurantList.size() + " ristorante/i", false);
-                restaurantsListView.setVisible(true);
-            }
-        });
-        
-        loadTask.setOnFailed(e -> {
-            loadingIndicator.setVisible(false);
-            showStatus("Errore nel caricamento dei ristoranti. Riprova.", true);
-            restaurantsListView.setVisible(false);
-        });
-        
-        Thread t = new Thread(loadTask, "MyRestaurantsLoadTask");
-        t.setDaemon(true);
-        t.start();
+            default -> { }
+        }
     }
     /**
      * Mostra uno stato visivo (es. messaggio di errore o successo) per informare l'utente sull'operazione attuale.
@@ -374,7 +308,7 @@ public class MyRestaurantsView extends VBox {
      * </p>
      */
     public void refresh() {
-        loadRestaurants();
+        viewModel.loadRestaurants();
     }
     
     /**
@@ -555,8 +489,7 @@ public class MyRestaurantsView extends VBox {
                         deleteReview(review, detailsView);
                     });
                     
-                    String userName = sessionContext != null ? sessionContext.getCurrentUserName() : null;
-                    detailsView.loadRestaurantDetails(restaurant.getName(), userName);
+                    detailsView.loadRestaurantDetails(restaurant.getName(), viewModel.getCurrentUserName());
                     
                     Scene detailsScene = App.createSceneWithModal(detailsView, 1000, 700);
                     primaryStage.setScene(detailsScene);
@@ -599,9 +532,8 @@ public class MyRestaurantsView extends VBox {
             }
         });
         
-        String userName = sessionContext != null ? sessionContext.getCurrentUserName() : null;
+        String userName = viewModel.getCurrentUserName();
         if (userName == null) {
-            // Mostra un errore - l'utente deve essere loggato
             ModalManager.getInstance().showWarning(
                 "Accesso Richiesto", 
                 "Devi effettuare l'accesso per aggiungere una recensione"
@@ -622,7 +554,8 @@ public class MyRestaurantsView extends VBox {
      * @param review La recensione da modificare.
      * @param detailsView La vista dei dettagli del ristorante.
      */
-    private void showEditReviewDialog(Restaurant restaurant, dev.theknife.app.model.Review review, RestaurantDetailsView detailsView) {
+    private void showEditReviewDialog(Restaurant restaurant, dev.theknife.app.model.Review review,
+                                      RestaurantDetailsView detailsView) {
         ReviewView reviewView = new ReviewView(container.get(IReviewService.class), sessionContext);
         
         // Configura la navigazione
@@ -656,22 +589,13 @@ public class MyRestaurantsView extends VBox {
      * @param detailsView La vista dei dettagli da aggiornare dopo l'eliminazione.
      */
     private void deleteReview(dev.theknife.app.model.Review review, RestaurantDetailsView detailsView) {
-        try {
-            String email = sessionContext != null && sessionContext.getCurrentUser() != null
-                ? sessionContext.getCurrentUser().getEmail() : null;
-            boolean success = viewModel.deleteReview(review, email);
-            if (success) {
-                javafx.application.Platform.runLater(() -> {
-                    detailsView.refresh();
-                    String userName = sessionContext != null ? sessionContext.getCurrentUserName() : null;
-                    detailsView.loadRestaurantDetails(review.getRestaurantName(), userName);
-                });
-            } else {
-                ModalManager.getInstance().showError("Errore", "Impossibile eliminare la recensione. Riprova.");
-            }
-        } catch (Exception e) {
-            logger.error("Delete review failed", e);
-            ModalManager.getInstance().showError("Errore", "Si è verificato un errore: " + e.getMessage());
+        if (viewModel.deleteReview(review)) {
+            Platform.runLater(() -> {
+                detailsView.refresh();
+                detailsView.loadRestaurantDetails(review.getRestaurantName(), viewModel.getCurrentUserName());
+            });
+        } else {
+            ModalManager.getInstance().showError("Errore", "Impossibile eliminare la recensione. Riprova.");
         }
     }
     
@@ -701,8 +625,7 @@ public class MyRestaurantsView extends VBox {
             deleteReview(review, detailsView);
         });
         
-        String userName = sessionContext != null ? sessionContext.getCurrentUserName() : null;
-        detailsView.loadRestaurantDetails(restaurant.getName(), userName);
+        detailsView.loadRestaurantDetails(restaurant.getName(), viewModel.getCurrentUserName());
         
         Scene detailsScene = App.createSceneWithModal(detailsView, 1000, 700);
         primaryStage.setScene(detailsScene);
