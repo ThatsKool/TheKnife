@@ -9,6 +9,7 @@ package dev.theknife.app.viewmodel;
 import dev.theknife.app.model.Restaurant;
 import dev.theknife.app.model.Review;
 import dev.theknife.app.model.User;
+import dev.theknife.app.service.IFavoriteService;
 import dev.theknife.app.service.IRestaurantService;
 import dev.theknife.app.service.IReviewService;
 import dev.theknife.app.service.IUserService;
@@ -44,10 +45,32 @@ import java.util.concurrent.CompletableFuture;
  * @see dev.theknife.app.view.RestaurantDetailsView
  */
 public class RestaurantDetailsViewModel {
+
+    public enum FavoriteButtonStyle {
+        ADD,
+        REMOVE
+    }
+
+    public enum AddReviewPermission {
+        ALLOWED,
+        NOT_LOGGED_IN,
+        RESTAURATEUR_BLOCKED
+    }
+
+    public enum FavoriteToggleResult {
+        SUCCESS,
+        NOT_LOGGED_IN,
+        RESTAURATEUR_BLOCKED,
+        NO_RESTAURANT,
+        NO_EMAIL,
+        FAILED
+    }
+
     // CAMPI
     private final IRestaurantService restaurantService;
     private final IReviewService reviewService;
     private final IUserService userService;
+    private final IFavoriteService favoriteService;
     private final SessionContext sessionContext;
     private final Logger logger;
     
@@ -67,7 +90,16 @@ public class RestaurantDetailsViewModel {
     private final BooleanProperty isLoading;
     private final BooleanProperty hasReviews;
     private final BooleanProperty canAddReview;
-    
+    private final StringProperty ratingDistributionText;
+    private final BooleanProperty isFavorite;
+    private final BooleanProperty favoriteButtonVisible;
+    private final BooleanProperty favoriteButtonDisabled;
+    private final StringProperty favoriteButtonText;
+    private final ObjectProperty<FavoriteButtonStyle> favoriteButtonStyle;
+    private final BooleanProperty addReviewButtonDisabled;
+    private final StringProperty addReviewButtonTooltip;
+    private final StringProperty addReviewButtonText;
+
     // Stato interno
     private Restaurant currentRestaurant;
     private String currentUserName;
@@ -81,10 +113,15 @@ public class RestaurantDetailsViewModel {
      * @param userService Servizio per risolvere email → nome (autore recensioni).
      * @param sessionContext Contesto di sessione (nessun getInstance).
      */
-    public RestaurantDetailsViewModel(IRestaurantService restaurantService, IReviewService reviewService, IUserService userService, SessionContext sessionContext) {
+    public RestaurantDetailsViewModel(IRestaurantService restaurantService,
+                                      IReviewService reviewService,
+                                      IUserService userService,
+                                      IFavoriteService favoriteService,
+                                      SessionContext sessionContext) {
         this.restaurantService = restaurantService;
         this.reviewService = reviewService;
         this.userService = userService;
+        this.favoriteService = favoriteService;
         this.sessionContext = sessionContext;
         this.logger = Logger.getLogger(RestaurantDetailsViewModel.class);
         
@@ -104,6 +141,15 @@ public class RestaurantDetailsViewModel {
         this.isLoading = new SimpleBooleanProperty(false);
         this.hasReviews = new SimpleBooleanProperty(false);
         this.canAddReview = new SimpleBooleanProperty(false);
+        this.ratingDistributionText = new SimpleStringProperty("");
+        this.isFavorite = new SimpleBooleanProperty(false);
+        this.favoriteButtonVisible = new SimpleBooleanProperty(false);
+        this.favoriteButtonDisabled = new SimpleBooleanProperty(true);
+        this.favoriteButtonText = new SimpleStringProperty("★ Aggiungi ai Preferiti");
+        this.favoriteButtonStyle = new SimpleObjectProperty<>(FavoriteButtonStyle.ADD);
+        this.addReviewButtonDisabled = new SimpleBooleanProperty(true);
+        this.addReviewButtonTooltip = new SimpleStringProperty("");
+        this.addReviewButtonText = new SimpleStringProperty("Aggiungi Recensione");
     }
     
     // METODI
@@ -138,6 +184,7 @@ public class RestaurantDetailsViewModel {
                         updateRestaurantProperties();
                         loadReviews();
                         updateCanAddReview();
+                        refreshFavoriteButtonState();
                     }
                     isLoading.set(false);
                 });
@@ -182,6 +229,11 @@ public class RestaurantDetailsViewModel {
         reviews.addAll(restaurantReviews);
         
         updateReviewStatistics();
+        updateRatingDistributionText();
+    }
+
+    private void updateRatingDistributionText() {
+        ratingDistributionText.set(getRatingDistributionText());
     }
     
     /**
@@ -205,17 +257,158 @@ public class RestaurantDetailsViewModel {
      * </p>
      */
     private void updateCanAddReview() {
-        if (currentRestaurant == null) {
+        if (currentRestaurant == null || !isLoggedIn() || isRestaurateur()) {
             canAddReview.set(false);
+            refreshAddReviewButtonState();
             return;
         }
-        String userEmail = sessionContext.getCurrentUser() != null ? sessionContext.getCurrentUser().getEmail() : null;
+        String userEmail = getCurrentUserEmail();
         if (userEmail == null) {
             canAddReview.set(false);
+            refreshAddReviewButtonState();
             return;
         }
         boolean hasReviewed = reviewService.hasUserReviewedRestaurant(userEmail, currentRestaurant.getName());
         canAddReview.set(!hasReviewed);
+        refreshAddReviewButtonState();
+    }
+
+    public boolean isLoggedIn() {
+        return sessionContext != null && sessionContext.isLoggedIn();
+    }
+
+    public boolean isRestaurateur() {
+        if (!isLoggedIn() || sessionContext.getCurrentUser() == null) {
+            return false;
+        }
+        String role = sessionContext.getCurrentUser().getRole();
+        return "Restaurateur".equalsIgnoreCase(role) || "Ristoratore".equalsIgnoreCase(role);
+    }
+
+    public String getCurrentUserEmail() {
+        if (sessionContext == null || sessionContext.getCurrentUser() == null) {
+            return null;
+        }
+        return sessionContext.getCurrentUser().getEmail();
+    }
+
+    public AddReviewPermission checkAddReviewPermission() {
+        if (!isLoggedIn()) {
+            return AddReviewPermission.NOT_LOGGED_IN;
+        }
+        if (isRestaurateur()) {
+            return AddReviewPermission.RESTAURATEUR_BLOCKED;
+        }
+        return AddReviewPermission.ALLOWED;
+    }
+
+    public void refreshAddReviewButtonState() {
+        AddReviewPermission permission = checkAddReviewPermission();
+        if (permission == AddReviewPermission.NOT_LOGGED_IN) {
+            addReviewButtonDisabled.set(true);
+            addReviewButtonTooltip.set("Accedi per aggiungere una recensione");
+            addReviewButtonText.set("Aggiungi Recensione");
+            return;
+        }
+        if (permission == AddReviewPermission.RESTAURATEUR_BLOCKED) {
+            addReviewButtonDisabled.set(true);
+            addReviewButtonTooltip.set("I Ristoratori non possono aggiungere recensioni");
+            addReviewButtonText.set("Recensioni Disabilitate");
+            return;
+        }
+        boolean canAdd = canAddReview.get();
+        addReviewButtonDisabled.set(!canAdd);
+        addReviewButtonText.set("Aggiungi Recensione");
+        if (!canAdd) {
+            addReviewButtonTooltip.set("Hai già recensito questo ristorante");
+        } else {
+            addReviewButtonTooltip.set("");
+        }
+    }
+
+    public void refreshFavoriteButtonState() {
+        boolean loggedIn = isLoggedIn();
+        boolean restaurateur = isRestaurateur();
+        favoriteButtonVisible.set(loggedIn && !restaurateur);
+
+        Restaurant restaurant = currentRestaurant;
+        boolean disabled = !loggedIn || restaurateur || restaurant == null || restaurant.getId() == null;
+        favoriteButtonDisabled.set(disabled);
+
+        if (loggedIn && !restaurateur && restaurant != null && restaurant.getId() != null) {
+            String userEmail = getCurrentUserEmail();
+            boolean favorite = userEmail != null && favoriteService.isFavorite(userEmail, restaurant.getId());
+            isFavorite.set(favorite);
+            if (favorite) {
+                favoriteButtonText.set("★ Rimuovi dai Preferiti");
+                favoriteButtonStyle.set(FavoriteButtonStyle.REMOVE);
+            } else {
+                favoriteButtonText.set("★ Aggiungi ai Preferiti");
+                favoriteButtonStyle.set(FavoriteButtonStyle.ADD);
+            }
+        } else {
+            isFavorite.set(false);
+        }
+    }
+
+    public FavoriteToggleResult toggleFavorite() {
+        if (!isLoggedIn()) {
+            return FavoriteToggleResult.NOT_LOGGED_IN;
+        }
+        if (isRestaurateur()) {
+            return FavoriteToggleResult.RESTAURATEUR_BLOCKED;
+        }
+        if (currentRestaurant == null || currentRestaurant.getId() == null) {
+            return FavoriteToggleResult.NO_RESTAURANT;
+        }
+        String userEmail = getCurrentUserEmail();
+        if (userEmail == null) {
+            return FavoriteToggleResult.NO_EMAIL;
+        }
+
+        Long restaurantId = currentRestaurant.getId();
+        boolean favorite = favoriteService.isFavorite(userEmail, restaurantId);
+        boolean success = favorite
+            ? favoriteService.removeFavorite(userEmail, restaurantId)
+            : favoriteService.addFavorite(userEmail, restaurantId);
+
+        if (success) {
+            refreshFavoriteButtonState();
+            return FavoriteToggleResult.SUCCESS;
+        }
+        return FavoriteToggleResult.FAILED;
+    }
+
+    public boolean isReviewOwner(Review review) {
+        if (!isLoggedIn() || review == null) {
+            return false;
+        }
+        String currentUserEmail = getCurrentUserEmail();
+        return currentUserEmail != null
+            && review.getUserEmail() != null
+            && currentUserEmail.equalsIgnoreCase(review.getUserEmail());
+    }
+
+    public boolean isRestaurateurOwner(Review review) {
+        if (!isLoggedIn() || review == null || currentRestaurant == null) {
+            return false;
+        }
+        String currentUserEmail = getCurrentUserEmail();
+        String restaurateurEmail = currentRestaurant.getRestaurateurEmail();
+        return currentUserEmail != null
+            && restaurateurEmail != null
+            && restaurateurEmail.trim().equalsIgnoreCase(currentUserEmail.trim());
+    }
+
+    public boolean canShowRestaurateurRespondButton(Review review) {
+        return isRestaurateurOwner(review) && review != null && !review.hasRestaurateurResponse();
+    }
+
+    public boolean canShowClientRespondButton(Review review) {
+        return isReviewOwner(review)
+            && review != null
+            && review.hasRestaurateurResponse()
+            && !review.hasClientResponse();
     }
     
     /**
@@ -227,6 +420,7 @@ public class RestaurantDetailsViewModel {
             reviewService.refreshReviews();
             loadReviews();
             updateCanAddReview();
+            refreshFavoriteButtonState();
         }
     }
     
@@ -475,5 +669,41 @@ public class RestaurantDetailsViewModel {
      */
     public BooleanProperty canAddReviewProperty() {
         return canAddReview;
+    }
+
+    public StringProperty ratingDistributionTextProperty() {
+        return ratingDistributionText;
+    }
+
+    public BooleanProperty isFavoriteProperty() {
+        return isFavorite;
+    }
+
+    public BooleanProperty favoriteButtonVisibleProperty() {
+        return favoriteButtonVisible;
+    }
+
+    public BooleanProperty favoriteButtonDisabledProperty() {
+        return favoriteButtonDisabled;
+    }
+
+    public StringProperty favoriteButtonTextProperty() {
+        return favoriteButtonText;
+    }
+
+    public ObjectProperty<FavoriteButtonStyle> favoriteButtonStyleProperty() {
+        return favoriteButtonStyle;
+    }
+
+    public BooleanProperty addReviewButtonDisabledProperty() {
+        return addReviewButtonDisabled;
+    }
+
+    public StringProperty addReviewButtonTooltipProperty() {
+        return addReviewButtonTooltip;
+    }
+
+    public StringProperty addReviewButtonTextProperty() {
+        return addReviewButtonText;
     }
 }

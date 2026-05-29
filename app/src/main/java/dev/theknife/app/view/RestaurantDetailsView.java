@@ -14,6 +14,9 @@ import dev.theknife.app.service.IUserService;
 import dev.theknife.app.service.IFavoriteService;
 import dev.theknife.app.session.SessionContext;
 import dev.theknife.app.viewmodel.RestaurantDetailsViewModel;
+import dev.theknife.app.viewmodel.RestaurantDetailsViewModel.AddReviewPermission;
+import dev.theknife.app.viewmodel.RestaurantDetailsViewModel.FavoriteButtonStyle;
+import dev.theknife.app.viewmodel.RestaurantDetailsViewModel.FavoriteToggleResult;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -72,11 +75,8 @@ public class RestaurantDetailsView extends VBox {
     private final ProgressIndicator loadingIndicator;
     private final Label noReviewsLabel;
     private final Label ratingDistributionLabel;
-    private IFavoriteService favoriteService;
     private String currentRestaurantName;
-    
-    private final SessionContext sessionContext;
- 
+
     // COSTRUTTORI
     /**
      * Costruisce la vista dei dettagli del ristorante.
@@ -88,12 +88,12 @@ public class RestaurantDetailsView extends VBox {
      * @param sessionContext Il contesto di sessione per l'accesso all'utente corrente.
      */
     public RestaurantDetailsView(DependencyContainer container, SessionContext sessionContext) {
-        this.sessionContext = sessionContext;
         IRestaurantService restaurantService = container.get(IRestaurantService.class);
         IReviewService reviewService = container.get(IReviewService.class);
         IUserService userService = container.get(IUserService.class);
-        this.favoriteService = container.get(IFavoriteService.class);
-        this.viewModel = new RestaurantDetailsViewModel(restaurantService, reviewService, userService, sessionContext);
+        IFavoriteService favoriteService = container.get(IFavoriteService.class);
+        this.viewModel = new RestaurantDetailsViewModel(
+            restaurantService, reviewService, userService, favoriteService, sessionContext);
         this.restaurantNameLabel = new Label();
         this.addressLabel = new Label();
         this.locationLabel = new Label();
@@ -334,10 +334,15 @@ public class RestaurantDetailsView extends VBox {
         ratingDistributionLabel.setWrapText(true);
         
         // Reviews list with edit/delete functionality
-        reviewsListView.setCellFactory(listView -> {
-            ReviewListCell cell = new ReviewListCell();
-            return cell;
-        });
+        reviewsListView.setCellFactory(listView -> new ReviewListCell(
+            viewModel,
+            this::onEditReview,
+            this::onDeleteReview,
+            this::onRestaurateurRespond,
+            this::onClientRespond,
+            () -> editReviewAction != null,
+            () -> deleteReviewAction != null
+        ));
         reviewsListView.setStyle("-fx-background-color: #f8f9fa; -fx-border-color: #dee2e6; -fx-border-radius: 5;");
         
         // No reviews label
@@ -404,15 +409,56 @@ public class RestaurantDetailsView extends VBox {
         // Reviews visibility
         reviewsListView.visibleProperty().bind(viewModel.hasReviewsProperty());
         noReviewsLabel.visibleProperty().bind(viewModel.hasReviewsProperty().not());
-        
-        // Add review button - disabled if not logged in OR if user can't add review
-        // We'll update this manually in updateAddReviewButtonState()
-        updateAddReviewButtonState();
-        
-        // Also listen to canAddReview changes
-        viewModel.canAddReviewProperty().addListener((obs, oldVal, newVal) -> {
-            updateAddReviewButtonState();
+
+        ratingDistributionLabel.textProperty().bind(viewModel.ratingDistributionTextProperty());
+
+        addReviewButton.disableProperty().bind(viewModel.addReviewButtonDisabledProperty());
+        addReviewButton.textProperty().bind(viewModel.addReviewButtonTextProperty());
+        viewModel.addReviewButtonTooltipProperty().addListener((obs, oldTip, newTip) -> {
+            if (newTip == null || newTip.isEmpty()) {
+                addReviewButton.setTooltip(null);
+            } else {
+                addReviewButton.setTooltip(new Tooltip(newTip));
+            }
+            applyAddReviewButtonStyle();
         });
+        viewModel.addReviewButtonTextProperty().addListener((obs, oldText, newText) ->
+            applyAddReviewButtonStyle());
+
+        favoriteButton.visibleProperty().bind(viewModel.favoriteButtonVisibleProperty());
+        favoriteButton.disableProperty().bind(viewModel.favoriteButtonDisabledProperty());
+        favoriteButton.textProperty().bind(viewModel.favoriteButtonTextProperty());
+        viewModel.favoriteButtonStyleProperty().addListener((obs, oldStyle, newStyle) ->
+            applyFavoriteButtonStyle(newStyle));
+
+        viewModel.canAddReviewProperty().addListener((obs, oldVal, newVal) ->
+            viewModel.refreshAddReviewButtonState());
+    }
+
+    private void applyAddReviewButtonStyle() {
+        if (viewModel.isRestaurateur()) {
+            addReviewButton.setStyle(
+                "-fx-background-color: #95a5a6; -fx-text-fill: white; -fx-cursor: not-allowed;");
+        } else {
+            addReviewButton.setStyle(
+                "-fx-background-color: " + PRIMARY_GREEN + ";" +
+                "-fx-text-fill: white;" +
+                "-fx-font-weight: 600;" +
+                "-fx-font-size: 14px;" +
+                "-fx-background-radius: 20px;" +
+                "-fx-cursor: hand;"
+            );
+        }
+    }
+
+    private void applyFavoriteButtonStyle(FavoriteButtonStyle style) {
+        if (style == FavoriteButtonStyle.REMOVE) {
+            favoriteButton.setStyle(
+                "-fx-background-color: #dc3545; -fx-text-fill: white; -fx-padding: 8 16; -fx-font-weight: bold;");
+        } else {
+            favoriteButton.setStyle(
+                "-fx-background-color: #ffc107; -fx-text-fill: #212529; -fx-padding: 8 16; -fx-font-weight: bold;");
+        }
     }
     
     /**
@@ -425,105 +471,36 @@ public class RestaurantDetailsView extends VBox {
         backButton.setOnAction(e -> onBackToRestaurantList());
         addReviewButton.setOnAction(e -> onAddReview());
         favoriteButton.setOnAction(e -> onToggleFavorite());
-        
-        // Update button state based on login status
-        updateAddReviewButtonState();
     }
-    
-    /**
-     * Update the add review button state based on login status
-     */
-    private void updateAddReviewButtonState() {
-        boolean isLoggedIn = sessionContext.isLoggedIn();
-        boolean canAddReview = viewModel.canAddReviewProperty().get();
-        
-        // Button is disabled if user is not logged in OR if user can't add review
-        addReviewButton.setDisable(!isLoggedIn || !canAddReview);
-        
-        if (!isLoggedIn) {
-            addReviewButton.setTooltip(new javafx.scene.control.Tooltip("Accedi per aggiungere una recensione"));
-        } else if (!canAddReview) {
-            addReviewButton.setTooltip(new javafx.scene.control.Tooltip("Hai già recensito questo ristorante"));
-        } else {
-            addReviewButton.setTooltip(null);
-        }
-    }
-    
+
     /**
      * Load restaurant details
      */
     public void loadRestaurantDetails(String restaurantName, String userName) {
         this.currentRestaurantName = restaurantName;
         viewModel.loadRestaurantDetails(restaurantName, userName);
-        
-        // Update rating distribution and button state
         Platform.runLater(() -> {
-            ratingDistributionLabel.setText(viewModel.getRatingDistributionText());
-            updateAddReviewButtonState();
-            updateFavoriteButtonState();
+            viewModel.refreshAddReviewButtonState();
+            viewModel.refreshFavoriteButtonState();
+            applyFavoriteButtonStyle(viewModel.favoriteButtonStyleProperty().get());
+            applyAddReviewButtonStyle();
         });
     }
-    
-    /**
-     * Update favorite button state
-     */
-    private void updateFavoriteButtonState() {
-        boolean isLoggedIn = sessionContext.isLoggedIn();
-        boolean isRestaurateur = isLoggedIn && 
-                                sessionContext.getCurrentUser() != null && 
-                                ("Restaurateur".equals(sessionContext.getCurrentUser().getRole()) || "Ristoratore".equals(sessionContext.getCurrentUser().getRole()));
-        
-        favoriteButton.setVisible(isLoggedIn && !isRestaurateur);
-        dev.theknife.app.model.Restaurant current = viewModel.getCurrentRestaurant();
-        favoriteButton.setDisable(!isLoggedIn || isRestaurateur || current == null || current.getId() == null);
-        
-        if (isLoggedIn && !isRestaurateur && current != null && current.getId() != null) {
-            String userEmail = sessionContext.getCurrentUser() != null ? sessionContext.getCurrentUser().getEmail() : null;
-            boolean isFavorite = userEmail != null && favoriteService.isFavorite(userEmail, current.getId());
-            
-            if (isFavorite) {
-                favoriteButton.setText("★ Rimuovi dai Preferiti");
-                favoriteButton.setStyle("-fx-background-color: #dc3545; -fx-text-fill: white; -fx-padding: 8 16; -fx-font-weight: bold;");
-            } else {
-                favoriteButton.setText("★ Aggiungi ai Preferiti");
-                favoriteButton.setStyle("-fx-background-color: #ffc107; -fx-text-fill: #212529; -fx-padding: 8 16; -fx-font-weight: bold;");
-            }
-        }
-    }
-    
+
     private void onToggleFavorite() {
-        if (!sessionContext.isLoggedIn()) return;
-        dev.theknife.app.model.Restaurant current = viewModel.getCurrentRestaurant();
-        if (current == null || current.getId() == null) return;
-        
-        boolean isRestaurateur = sessionContext.getCurrentUser() != null && 
-                                ("Restaurateur".equals(sessionContext.getCurrentUser().getRole()) || "Ristoratore".equals(sessionContext.getCurrentUser().getRole()));
-        if (isRestaurateur) {
-            ModalManager.getInstance().showWarning(
-                "Non Consentito", 
-                "I Ristoratori non possono aggiungere ristoranti ai preferiti\nSolo i clienti possono aggiungere ristoranti alla loro lista preferiti."
+        FavoriteToggleResult result = viewModel.toggleFavorite();
+        switch (result) {
+            case RESTAURATEUR_BLOCKED -> ModalManager.getInstance().showWarning(
+                "Non Consentito",
+                "I Ristoratori non possono aggiungere ristoranti ai preferiti\n"
+                    + "Solo i clienti possono aggiungere ristoranti alla loro lista preferiti."
             );
-            return;
-        }
-        
-        String userEmail = sessionContext.getCurrentUser() != null ? sessionContext.getCurrentUser().getEmail() : null;
-        if (userEmail == null) return;
-        boolean isFavorite = favoriteService.isFavorite(userEmail, current.getId());
-        
-        boolean success;
-        if (isFavorite) {
-            success = favoriteService.removeFavorite(userEmail, current.getId());
-        } else {
-            success = favoriteService.addFavorite(userEmail, current.getId());
-        }
-        
-        if (success) {
-            updateFavoriteButtonState();
-        } else {
-            ModalManager.getInstance().showError(
-                "Errore", 
-                "Impossibile aggiornare i preferiti\nSi è verificato un errore durante l'aggiornamento dei preferiti. Riprova."
+            case FAILED -> ModalManager.getInstance().showError(
+                "Errore",
+                "Impossibile aggiornare i preferiti\n"
+                    + "Si è verificato un errore durante l'aggiornamento dei preferiti. Riprova."
             );
+            default -> { }
         }
     }
     
@@ -542,20 +519,34 @@ public class RestaurantDetailsView extends VBox {
      * Handle add review button click
      */
     private void onAddReview() {
-        // Check if user is logged in
-        if (!sessionContext.isLoggedIn()) {
-            ModalManager.getInstance().showWarning(
-                "Login Richiesto", 
-                "Devi essere loggato per aggiungere una recensione\nAccedi o registrati per aggiungere una recensione."
-            );
+        if (!checkAddReviewPermissionAndWarn()) {
             return;
         }
-        
-        // This would typically open the review dialog
-        // The action is set externally via setAddReviewButtonAction
         if (addReviewButtonAction != null) {
             addReviewButtonAction.run();
         }
+    }
+
+    private boolean checkAddReviewPermissionAndWarn() {
+        return switch (viewModel.checkAddReviewPermission()) {
+            case NOT_LOGGED_IN -> {
+                ModalManager.getInstance().showWarning(
+                    "Login Richiesto",
+                    "Devi essere loggato per aggiungere una recensione\n"
+                        + "Accedi o registrati per aggiungere una recensione."
+                );
+                yield false;
+            }
+            case RESTAURATEUR_BLOCKED -> {
+                ModalManager.getInstance().showWarning(
+                    "Azione Non Consentita",
+                    "I Ristoratori non possono aggiungere recensioni.\n"
+                        + "L'unica azione consentita è rispondere alle recensioni dei propri ristoranti."
+                );
+                yield false;
+            }
+            case ALLOWED -> true;
+        };
     }
     
     private Runnable addReviewButtonAction;
@@ -572,63 +563,23 @@ public class RestaurantDetailsView extends VBox {
      */
     public void setAddReviewButtonAction(Runnable action) {
         this.addReviewButtonAction = action;
-        // Update the button to check login before executing
         addReviewButton.setOnAction(e -> {
-            if (!sessionContext.isLoggedIn()) {
-                ModalManager.getInstance().showWarning(
-                    "Login Richiesto", 
-                    "Devi essere loggato per aggiungere una recensione\nAccedi o registrati per aggiungere una recensione."
-                );
+            if (!checkAddReviewPermissionAndWarn()) {
                 return;
             }
-            
-            // Explicitly block Restaurateurs from adding reviews
-            dev.theknife.app.model.User currentUser = sessionContext.getCurrentUser();
-            if (currentUser != null) {
-                String role = currentUser.getRole();
-                if ("Restaurateur".equalsIgnoreCase(role) || "Ristoratore".equalsIgnoreCase(role)) {
-                    ModalManager.getInstance().showWarning(
-                        "Azione Non Consentita",
-                        "I Ristoratori non possono aggiungere recensioni.\nL'unica azione consentita è rispondere alle recensioni dei propri ristoranti."
-                    );
-                    return;
-                }
-            }
-            
             if (action != null) {
                 action.run();
             }
         });
-        
-        // Visually update button state if user is already logged in as Restaurateur
-        updateAddReviewButtonVisuals();
+        viewModel.refreshAddReviewButtonState();
+        applyAddReviewButtonStyle();
     }
-    
-    /**
-     * Aggiorna l'aspetto visivo del pulsante "Aggiungi Recensione" in base al ruolo dell'utente.
-     * <p>
-     * Se l'utente è un ristoratore, il pulsante viene disabilitato visivamente
-     * poiché i ristoratori non possono aggiungere recensioni.
-     * </p>
-     */
-    private void updateAddReviewButtonVisuals() {
-        if (sessionContext.isLoggedIn() && sessionContext.getCurrentUser() != null) {
-            String role = sessionContext.getCurrentUser().getRole();
-            if ("Restaurateur".equalsIgnoreCase(role) || "Ristoratore".equalsIgnoreCase(role)) {
-                addReviewButton.setText("Recensioni Disabilitate");
-                addReviewButton.setStyle("-fx-background-color: #95a5a6; -fx-text-fill: white; -fx-cursor: not-allowed;");
-                Tooltip tooltip = new Tooltip("I Ristoratori non possono aggiungere recensioni");
-                Tooltip.install(addReviewButton, tooltip);
-            }
-        }
-    }
-    
+
     /**
      * Aggiorna la vista ricaricando le recensioni dal ViewModel.
      */
     public void refresh() {
         viewModel.refreshReviews();
-        ratingDistributionLabel.setText(viewModel.getRatingDistributionText());
     }
     
     /**
@@ -681,181 +632,6 @@ public class RestaurantDetailsView extends VBox {
      */
     public void setDeleteReviewAction(java.util.function.Consumer<Review> action) {
         this.deleteReviewAction = action;
-    }
-    
-    /**
-     * Cella personalizzata per la visualizzazione delle recensioni con pulsanti di modifica/eliminazione e risposte.
-     */
-    private class ReviewListCell extends ListCell<Review> {
-        /**
-         * Aggiorna il contenuto della cella quando cambia l'elemento della lista.
-         * <p>
-         * Crea una card personalizzata per visualizzare i dettagli della recensione,
-         * inclusi pulsanti di modifica/eliminazione e risposte del ristoratore/cliente.
-         * </p>
-         *
-         * @param review La recensione da visualizzare.
-         * @param empty true se la cella è vuota, false altrimenti.
-         */
-        @Override
-        protected void updateItem(Review review, boolean empty) {
-            super.updateItem(review, empty);
-            
-            if (empty || review == null) {
-                setGraphic(null);
-                setText(null);
-            } else {
-                VBox cellContent = new VBox();
-                cellContent.setSpacing(8);
-                cellContent.setPadding(new Insets(10));
-                
-                // Header with user and rating
-                HBox header = new HBox();
-                header.setSpacing(10);
-                header.setAlignment(Pos.CENTER_LEFT);
-                
-                String authorDisplay = viewModel.getReviewAuthorDisplayName(review);
-                Label userLabel = new Label(authorDisplay);
-                userLabel.setFont(Font.font("Arial", FontWeight.BOLD, 12));
-                userLabel.setStyle("-fx-text-fill: #2c3e50;");
-                
-                Label ratingLabel = new Label(review.getRatingStars());
-                ratingLabel.setFont(Font.font("Arial", 14));
-                ratingLabel.setStyle("-fx-text-fill: #e67e22;");
-                
-                Label dateLabel = new Label(review.getFormattedDate());
-                dateLabel.setFont(Font.font("Arial", 10));
-                dateLabel.setStyle("-fx-text-fill: #6c757d;");
-                
-                header.getChildren().addAll(userLabel, ratingLabel, dateLabel);
-                
-                // Comment
-                Text commentText = new Text(review.getComment());
-                commentText.setFont(Font.font("Arial", 12));
-                commentText.setStyle("-fx-fill: #212529;");
-                commentText.setWrappingWidth(450);
-                
-                cellContent.getChildren().addAll(header, commentText);
-                
-                // Check user permissions
-                boolean isLoggedIn = sessionContext.isLoggedIn();
-                String currentUserEmail = sessionContext.getCurrentUser() != null ? sessionContext.getCurrentUser().getEmail() : null;
-                
-                // Proprietario: solo email (univoco e persistente)
-                boolean isReviewOwner = isLoggedIn && currentUserEmail != null
-                        && review.getUserEmail() != null
-                        && currentUserEmail.equalsIgnoreCase(review.getUserEmail());
-                
-                // Check if current user is the restaurateur owner
-                dev.theknife.app.model.Restaurant restaurant = viewModel.getCurrentRestaurant();
-                boolean isRestaurateurOwner = false;
-                if (isLoggedIn && currentUserEmail != null && restaurant != null && restaurant.getRestaurateurEmail() != null) {
-                     isRestaurateurOwner = restaurant.getRestaurateurEmail().trim().equalsIgnoreCase(currentUserEmail.trim());
-                }
-                
-                // Show restaurateur response if exists
-                if (review.hasRestaurateurResponse()) {
-                    VBox responseBox = new VBox();
-                    responseBox.setSpacing(5);
-                    responseBox.setPadding(new Insets(8));
-                    responseBox.setStyle("-fx-background-color: #e8f4f8; -fx-border-color: #17a2b8; -fx-border-radius: 5; -fx-background-radius: 5;");
-                    
-                    Label responseHeader = new Label("Risposta dal Ristorante:");
-                    responseHeader.setFont(Font.font("Arial", FontWeight.BOLD, 11));
-                    responseHeader.setStyle("-fx-text-fill: #17a2b8;");
-                    
-                    Text responseText = new Text(review.getRestaurateurResponse());
-                    responseText.setFont(Font.font("Arial", 11));
-                    responseText.setStyle("-fx-fill: #212529;");
-                    responseText.setWrappingWidth(430);
-                    
-                    responseBox.getChildren().addAll(responseHeader, responseText);
-                    
-                    // Show client response if exists
-                    if (review.hasClientResponse()) {
-                        VBox clientResponseBox = new VBox();
-                        clientResponseBox.setSpacing(5);
-                        clientResponseBox.setPadding(new Insets(8));
-                        clientResponseBox.setStyle("-fx-background-color: #fff3cd; -fx-border-color: #ffc107; -fx-border-radius: 5; -fx-background-radius: 5;");
-                        
-                        String clientName = viewModel.getReviewAuthorDisplayName(review);
-                        Label clientResponseHeader = new Label("Risposta da " + clientName + ":");
-                        clientResponseHeader.setFont(Font.font("Arial", FontWeight.BOLD, 11));
-                        clientResponseHeader.setStyle("-fx-text-fill: #856404;");
-                        
-                        Text clientResponseText = new Text(review.getClientResponse());
-                        clientResponseText.setFont(Font.font("Arial", 11));
-                        clientResponseText.setStyle("-fx-fill: #212529;");
-                        clientResponseText.setWrappingWidth(410);
-                        
-                        clientResponseBox.getChildren().addAll(clientResponseHeader, clientResponseText);
-                        responseBox.getChildren().add(clientResponseBox);
-                    }
-                    
-                    cellContent.getChildren().add(responseBox);
-                }
-                
-                // Button container
-                HBox buttonBox = new HBox();
-                buttonBox.setSpacing(10);
-                buttonBox.setAlignment(Pos.CENTER_RIGHT);
-                
-                // Add edit/delete buttons if user owns the review
-                if (isReviewOwner && (editReviewAction != null || deleteReviewAction != null)) {
-                    if (editReviewAction != null) {
-                        Button editButton = new Button("Modifica");
-                        editButton.setStyle("-fx-background-color: #007bff; -fx-text-fill: white; -fx-padding: 4 12; -fx-background-radius: 4; -fx-font-size: 11;");
-                        editButton.setOnAction(e -> {
-                            e.consume();
-                            onEditReview(review);
-                        });
-                        buttonBox.getChildren().add(editButton);
-                    }
-                    
-                    if (deleteReviewAction != null) {
-                        Button deleteButton = new Button("Elimina");
-                        deleteButton.setStyle("-fx-background-color: #dc3545; -fx-text-fill: white; -fx-padding: 4 12; -fx-background-radius: 4; -fx-font-size: 11;");
-                        deleteButton.setOnAction(e -> {
-                            e.consume();
-                            onDeleteReview(review);
-                        });
-                        buttonBox.getChildren().add(deleteButton);
-                    }
-                }
-                
-                // Add restaurateur response button (only if restaurateur owner and hasn't responded)
-                if (isRestaurateurOwner && !review.hasRestaurateurResponse()) {
-                    Button respondButton = new Button("Rispondi");
-                    respondButton.setStyle("-fx-background-color: #28a745; -fx-text-fill: white; -fx-padding: 4 12; -fx-background-radius: 4; -fx-font-size: 11;");
-                    respondButton.setOnAction(e -> {
-                        e.consume();
-                        onRestaurateurRespond(review);
-                    });
-                    buttonBox.getChildren().add(respondButton);
-                }
-                
-                // Add client response button (only if review owner, restaurateur has responded, and client hasn't responded)
-                if (isReviewOwner && review.hasRestaurateurResponse() && !review.hasClientResponse()) {
-                    Button respondButton = new Button("Rispondi");
-                    respondButton.setStyle("-fx-background-color: #ffc107; -fx-text-fill: #212529; -fx-padding: 4 12; -fx-background-radius: 4; -fx-font-size: 11;");
-                    respondButton.setOnAction(e -> {
-                        e.consume();
-                        onClientRespond(review);
-                    });
-                    buttonBox.getChildren().add(respondButton);
-                }
-                
-                if (!buttonBox.getChildren().isEmpty()) {
-                    cellContent.getChildren().add(buttonBox);
-                }
-                
-                setGraphic(cellContent);
-                setText(null);
-                
-                // Add slide in animation
-                dev.theknife.app.util.AnimationUtils.slideInFromBottom(cellContent, 300, 50);
-            }
-        }
     }
     
     /**
