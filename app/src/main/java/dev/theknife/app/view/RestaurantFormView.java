@@ -9,6 +9,7 @@ package dev.theknife.app.view;
 import dev.theknife.app.container.DependencyContainer;
 import dev.theknife.app.model.Restaurant;
 import dev.theknife.app.service.IRestaurantService;
+import dev.theknife.app.service.RestaurantQueryService;
 import dev.theknife.app.session.SessionContext;
 import dev.theknife.app.viewmodel.RestaurantFormViewModel;
 import dev.theknife.app.config.AppConfig;
@@ -122,7 +123,7 @@ public class RestaurantFormView extends VBox {
         this.restaurantService = container.get(IRestaurantService.class);
         this.viewModel = new RestaurantFormViewModel(
             this.restaurantService,
-            container.get(dev.theknife.app.service.RestaurantQueryService.class)
+            container.get(RestaurantQueryService.class)
         );
         
         // Initialize fields

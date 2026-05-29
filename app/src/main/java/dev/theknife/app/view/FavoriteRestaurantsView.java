@@ -11,6 +11,7 @@ import dev.theknife.app.container.DependencyContainer;
 import dev.theknife.app.model.Restaurant;
 import dev.theknife.app.service.IFavoriteService;
 import dev.theknife.app.service.IRestaurantService;
+import dev.theknife.app.service.IReviewService;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
@@ -133,7 +134,7 @@ public class FavoriteRestaurantsView extends VBox {
         this.viewModel = new FavoriteRestaurantsViewModel(
             container.get(IFavoriteService.class),
             container.get(IRestaurantService.class),
-            container.get(dev.theknife.app.service.IReviewService.class)
+            container.get(IReviewService.class)
         );
         
         this.favoritesListView = new ListView<>();
@@ -552,7 +553,7 @@ public class FavoriteRestaurantsView extends VBox {
      * @param detailsView La vista dei dettagli del ristorante.
      */
     private void showAddReviewDialog(dev.theknife.app.model.Restaurant restaurant, RestaurantDetailsView detailsView) {
-        ReviewView reviewView = new ReviewView(container.get(dev.theknife.app.service.IReviewService.class), sessionContext);
+        ReviewView reviewView = new ReviewView(container.get(IReviewService.class), sessionContext);
         
         // Configura la navigazione
         reviewView.setCancelButtonAction(() -> {
@@ -594,7 +595,7 @@ public class FavoriteRestaurantsView extends VBox {
      * @param detailsView La vista dei dettagli del ristorante.
      */
     private void showEditReviewDialog(dev.theknife.app.model.Restaurant restaurant, dev.theknife.app.model.Review review, RestaurantDetailsView detailsView) {
-        ReviewView reviewView = new ReviewView(container.get(dev.theknife.app.service.IReviewService.class), sessionContext);
+        ReviewView reviewView = new ReviewView(container.get(IReviewService.class), sessionContext);
         
         // Configura la navigazione
         reviewView.setCancelButtonAction(() -> {
@@ -628,9 +629,10 @@ public class FavoriteRestaurantsView extends VBox {
      */
     private void deleteReview(dev.theknife.app.model.Review review, RestaurantDetailsView detailsView) {
         try {
+            IReviewService reviewService = container.get(IReviewService.class);
             String email = sessionContext != null && sessionContext.getCurrentUser() != null
                 ? sessionContext.getCurrentUser().getEmail() : null;
-            boolean success = container.get(dev.theknife.app.service.IReviewService.class).deleteReview(review.getId(), email);
+            boolean success = reviewService.deleteReview(review.getId(), email);
             if (success) {
                 javafx.application.Platform.runLater(() -> {
                     detailsView.refresh();

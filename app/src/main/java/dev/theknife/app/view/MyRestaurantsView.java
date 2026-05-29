@@ -581,7 +581,7 @@ public class MyRestaurantsView extends VBox {
      * @param detailsView La vista dei dettagli del ristorante.
      */
     private void showAddReviewDialog(Restaurant restaurant, RestaurantDetailsView detailsView) {
-        dev.theknife.app.view.ReviewView reviewView = new dev.theknife.app.view.ReviewView(container.get(IReviewService.class), sessionContext);
+        ReviewView reviewView = new ReviewView(container.get(IReviewService.class), sessionContext);
         
         // Configura la navigazione
         reviewView.setCancelButtonAction(() -> {
@@ -623,7 +623,7 @@ public class MyRestaurantsView extends VBox {
      * @param detailsView La vista dei dettagli del ristorante.
      */
     private void showEditReviewDialog(Restaurant restaurant, dev.theknife.app.model.Review review, RestaurantDetailsView detailsView) {
-        dev.theknife.app.view.ReviewView reviewView = new dev.theknife.app.view.ReviewView(container.get(IReviewService.class), sessionContext);
+        ReviewView reviewView = new ReviewView(container.get(IReviewService.class), sessionContext);
         
         // Configura la navigazione
         reviewView.setCancelButtonAction(() -> {
