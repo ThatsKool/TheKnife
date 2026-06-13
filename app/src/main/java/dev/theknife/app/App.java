@@ -27,21 +27,25 @@ import javafx.scene.effect.DropShadow;
 import javafx.animation.PauseTransition;
 import javafx.util.Duration;
 
-import dev.theknife.app.service.IRestaurantService;
-import dev.theknife.app.service.RestaurantQueryService;
-import dev.theknife.app.session.SessionContext;
-import dev.theknife.app.view.RestaurantListView;
-import dev.theknife.app.viewmodel.RestaurantListViewModel;
-import dev.theknife.app.view.FavoriteRestaurantsView;
-import dev.theknife.app.view.RestaurantFormView;
-import dev.theknife.app.view.MyRestaurantsView;
-import dev.theknife.app.view.UserProfileView;
 import dev.theknife.app.container.DependencyContainer;
 import dev.theknife.app.model.User;
-import dev.theknife.app.view.components.ModalStackPane;
-import dev.theknife.app.view.ModalManager;
+import dev.theknife.app.service.IRestaurantService;
+import dev.theknife.app.service.IUserService;
+import dev.theknife.app.service.RestaurantQueryService;
+import dev.theknife.app.session.SessionContext;
+import dev.theknife.app.util.AnimationUtils;
+import dev.theknife.app.util.Logger;
+import dev.theknife.app.view.FavoriteRestaurantsView;
 import dev.theknife.app.view.LoginScreen;
+import dev.theknife.app.view.ModalManager;
+import dev.theknife.app.view.MyRestaurantsView;
 import dev.theknife.app.view.RegisterScreen;
+import dev.theknife.app.view.RestaurantFormView;
+import dev.theknife.app.view.RestaurantListView;
+import dev.theknife.app.view.UserProfileView;
+import dev.theknife.app.view.components.ModalStackPane;
+import dev.theknife.app.viewmodel.RestaurantListViewModel;
+import dev.theknife.app.viewmodel.UserProfileViewModel;
 import javafx.scene.Parent;
 
 /**
@@ -135,7 +139,7 @@ public class App extends Application {
             container.initializeAllServices();
             sessionContext = container.get(SessionContext.class);
         } catch (Exception e) {
-            dev.theknife.app.util.Logger.getLogger(App.class).error("Impossibile inizializzare l'applicazione", e);
+            Logger.getLogger(App.class).error("Impossibile inizializzare l'applicazione", e);
             
             javafx.scene.control.Alert alert = new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.ERROR);
             alert.setTitle("Errore Critico");
@@ -316,13 +320,12 @@ public class App extends Application {
         );
         
         btn.setOnAction(e -> {
-            dev.theknife.app.viewmodel.UserProfileViewModel profileViewModel =
-                new dev.theknife.app.viewmodel.UserProfileViewModel(
-                    container.get(dev.theknife.app.service.IUserService.class), sessionContext);
+            UserProfileViewModel profileViewModel =
+                new UserProfileViewModel(container.get(IUserService.class), sessionContext);
             ModalManager.getInstance().showCustom(new UserProfileView(profileViewModel).createView());
         });
-        
-        dev.theknife.app.util.AnimationUtils.applyButtonHoverAnimation(btn);
+
+        AnimationUtils.applyButtonHoverAnimation(btn);
         
         Tooltip tooltip = new Tooltip("Il tuo Profilo");
         Tooltip.install(btn, tooltip);
@@ -739,7 +742,7 @@ public class App extends Application {
      */
     private void createRegisterScene() {
         RegisterScreen registerScreen = new RegisterScreen(primaryStage, () -> homeScene, this::refreshHomeScene,
-            container.get(dev.theknife.app.service.IUserService.class), sessionContext);
+            container.get(IUserService.class), sessionContext);
         registerScene = registerScreen.getScene();
     }
     
@@ -748,7 +751,7 @@ public class App extends Application {
      */
     private void createLoginScene() {
         LoginScreen loginScreen = new LoginScreen(primaryStage, () -> homeScene, this::refreshHomeScene,
-            container.get(dev.theknife.app.service.IUserService.class), sessionContext);
+            container.get(IUserService.class), sessionContext);
         loginScene = loginScreen.getScene();
     }
 }
