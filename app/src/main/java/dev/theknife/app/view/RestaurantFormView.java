@@ -7,10 +7,13 @@
 package dev.theknife.app.view;
 
 import dev.theknife.app.container.DependencyContainer;
-import dev.theknife.app.model.Restaurant;
 import dev.theknife.app.service.IRestaurantService;
+import dev.theknife.app.service.RestaurantQueryService;
 import dev.theknife.app.session.SessionContext;
-import dev.theknife.app.viewmodel.RestaurantListViewModel;
+import dev.theknife.app.viewmodel.RestaurantFormViewModel;
+import dev.theknife.app.viewmodel.RestaurantFormViewModel.RestaurantFormData;
+import dev.theknife.app.viewmodel.RestaurantFormViewModel.SubmitResult;
+import dev.theknife.app.viewmodel.RestaurantFormViewModel.SubmitStatus;
 import dev.theknife.app.config.AppConfig;
 import dev.theknife.app.view.ModalManager;
 import javafx.geometry.Insets;
@@ -62,14 +65,9 @@ public class RestaurantFormView extends VBox {
     private static final String BORDER_GRAY = "#E0E0E0";
     
     /**
-     * Servizio per la gestione dei ristoranti.
+     * ViewModel per la logica di business del form.
      */
-    private final IRestaurantService restaurantService;
-    
-    /**
-     * ViewModel per la logica di business.
-     */
-    private final RestaurantListViewModel viewModel;
+    private final RestaurantFormViewModel viewModel;
     
     /**
      * Genera lo stile CSS per lo sfondo.
@@ -119,8 +117,11 @@ public class RestaurantFormView extends VBox {
         this.backScene = backScene;
         this.container = container;
         this.sessionContext = sessionContext;
-        this.restaurantService = container.get(IRestaurantService.class);
-        this.viewModel = new RestaurantListViewModel(this.restaurantService, sessionContext);
+        this.viewModel = new RestaurantFormViewModel(
+            container.get(IRestaurantService.class),
+            container.get(RestaurantQueryService.class),
+            sessionContext
+        );
         
         // Initialize fields
         this.nameField = new TextField();
@@ -386,140 +387,44 @@ public class RestaurantFormView extends VBox {
     private void onSubmit() {
         errorLabel.setText("");
         successLabel.setText("");
-        
-        // Validazione campi obbligatori: raccogliere tutti i campi mancanti/non validi
-        java.util.List<String> mancanti = new java.util.ArrayList<>();
-        if (nameField.getText() == null || nameField.getText().trim().isEmpty()) {
-            mancanti.add("Nome del ristorante");
-        }
-        if (locationField.getText() == null || locationField.getText().trim().isEmpty()) {
-            mancanti.add("Città");
-        }
-        String cucina = cuisineField.getEditor().getText();
-        if (cucina == null || cucina.trim().isEmpty()) {
-            mancanti.add("Cucina");
-        }
-        Double lat = parseDoubleOrNull(latitudeField.getText());
-        if (lat == null) {
-            mancanti.add("Latitudine (obbligatorio, inserire un numero tra -90 e 90)");
-        } else if (lat < -90 || lat > 90) {
-            mancanti.add("Latitudine (inserire un numero tra -90 e 90)");
-        }
-        Double lon = parseDoubleOrNull(longitudeField.getText());
-        if (lon == null) {
-            mancanti.add("Longitudine (obbligatorio, inserire un numero tra -180 e 180)");
-        } else if (lon < -180 || lon > 180) {
-            mancanti.add("Longitudine (inserire un numero tra -180 e 180)");
-        }
-        if (!mancanti.isEmpty()) {
-            StringBuilder msg = new StringBuilder("Compila correttamente i seguenti campi obbligatori:\n\n");
-            for (String m : mancanti) {
-                msg.append("• ").append(m).append("\n");
-            }
-            msg.append("\nI campi contrassegnati con * sono obbligatori.");
-            ModalManager.getInstance().showError("Campi obbligatori", msg.toString());
-            return;
-        }
-        
-        if (sessionContext == null || !sessionContext.isLoggedIn() || sessionContext.getCurrentUser() == null) {
-            errorLabel.setText("Devi aver effettuato l'accesso come ristoratore!");
-            return;
-        }
-        String role = sessionContext.getCurrentUser().getRole();
-        if (!"Restaurateur".equalsIgnoreCase(role) && !"Ristoratore".equalsIgnoreCase(role)) {
-            errorLabel.setText("Solo i ristoratori possono aggiungere ristoranti!");
-            return;
-        }
-        String restaurateurEmail = sessionContext.getCurrentUser().getEmail();
-        if (restaurateurEmail == null || restaurateurEmail.trim().isEmpty()) {
-            errorLabel.setText("Errore: Email utente non trovata. Effettua nuovamente l'accesso.");
-            return;
-        }
-        restaurateurEmail = restaurateurEmail.trim().toLowerCase();
-        
-        // Verify email is valid
-        if (!restaurateurEmail.contains("@")) {
-            errorLabel.setText("Errore: Email utente non valida. Effettua nuovamente l'accesso.");
-            return;
-        }
-        
-        double longitude = parseDoubleSafe(longitudeField.getText());
-        double latitude = parseDoubleSafe(latitudeField.getText());
 
-        // Create restaurant object with restaurateur email
-        Restaurant restaurant = new Restaurant(
-            nameField.getText().trim(),
-            addressField.getText().trim(),
-            locationField.getText().trim(),
-            priceField.getEditor().getText().trim(),
-            cuisineField.getEditor().getText().trim(),
-            longitude,
-            latitude,
-            phoneField.getText().trim(),
-            "", // url
-            websiteField.getText().trim(),
-            awardField.getText().trim(),
-            greenStarField.getText().trim(),
-            facilitiesField.getText().trim(),
-            descriptionArea.getText().trim(),
-            restaurateurEmail
+        RestaurantFormData formData = new RestaurantFormData(
+            nameField.getText(),
+            addressField.getText(),
+            locationField.getText(),
+            priceField.getEditor().getText(),
+            cuisineField.getEditor().getText(),
+            latitudeField.getText(),
+            longitudeField.getText(),
+            phoneField.getText(),
+            websiteField.getText(),
+            awardField.getText(),
+            greenStarField.getText(),
+            facilitiesField.getText(),
+            descriptionArea.getText()
         );
-        
-        // Verify restaurant has restaurateurEmail set before saving
-        if (restaurant.getRestaurateurEmail() == null || restaurant.getRestaurateurEmail().trim().isEmpty()) {
-            errorLabel.setText("Errore: Impossibile collegare il ristorante al tuo account. Riprova.");
+
+        SubmitResult result = viewModel.submit(formData);
+
+        if (result.getStatus() == SubmitStatus.VALIDATION_ERROR) {
+            ModalManager.getInstance().showError("Campi obbligatori", result.getMessage());
             return;
         }
-        
-        boolean success = restaurantService.addRestaurant(restaurant);
-        
-        if (success) {
-            ModalManager.getInstance().showInfo(
-                "Ristorante aggiunto",
-                "Il ristorante è stato inserito correttamente.\n\nVerrai reindirizzato a \"I Miei Ristoranti\".",
-                () -> {
-                    MyRestaurantsView myRestaurantsView = new MyRestaurantsView(primaryStage, backScene, container, sessionContext);
-                    primaryStage.setScene(myRestaurantsView.createScene());
-                }
-            );
-        } else {
-            errorLabel.setText("Impossibile aggiungere il ristorante. Riprova.");
-        }
-    }
 
-    /**
-     * Analizza una stringa in un valore double in modo sicuro.
-     * <p>
-     * Restituisce 0.0 se la stringa non può essere parsata, evitando eccezioni.
-     * </p>
-     *
-     * @param value La stringa da parsare.
-     * @return Il valore double parsato, o 0.0 se la conversione fallisce.
-     */
-    private double parseDoubleSafe(String value) {
-        try {
-            return Double.parseDouble(value);
-        } catch (Exception e) {
-            return 0.0;
+        if (!result.isSuccess()) {
+            errorLabel.setText(result.getMessage());
+            return;
         }
-    }
 
-    /**
-     * Restituisce il double parsato dalla stringa, o null se vuota/non numerica.
-     * Usato per validare campi obbligatori (es. latitudine/longitudine).
-     *
-     * @param value La stringa da parsare.
-     * @return Il valore parsato, o null se value è vuota o non è un numero valido.
-     */
-    private Double parseDoubleOrNull(String value) {
-        if (value == null || value.trim().isEmpty()) {
-            return null;
-        }
-        try {
-            return Double.parseDouble(value.trim());
-        } catch (NumberFormatException e) {
-            return null;
-        }
+        ModalManager.getInstance().showInfo(
+            "Ristorante aggiunto",
+            "Il ristorante è stato inserito correttamente.\n\nVerrai reindirizzato a \"I Miei Ristoranti\".",
+            () -> {
+                MyRestaurantsView myRestaurantsView = new MyRestaurantsView(
+                    primaryStage, backScene, container, sessionContext);
+                primaryStage.setScene(myRestaurantsView.createScene());
+            }
+        );
     }
     
     /**
